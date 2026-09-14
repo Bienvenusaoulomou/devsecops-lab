@@ -1,0 +1,31 @@
+services:
+
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+
+    container_name: devsecops-jenkins
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    group_add:
+      - "1001"
+
+    networks:
+      - devsecops-net
+
+volumes:
+  jenkins_home:
+    name: devsecops_jenkins_home
+
+networks:
+  devsecops-net:
+    external: true

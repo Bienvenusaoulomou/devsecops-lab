@@ -1,0 +1,8 @@
+title = "DevSecOps Gitleaks Test"
+
+[[rules]]
+id = "devsecops-test-secret"
+description = "Detect intentional DevSecOps test secret"
+regex = '''DEVSECOPS_TEST_SECRET_[A-Za-z0-9]+'''
+secretGroup = 0
+keywords = ["DEVSECOPS_TEST_SECRET"]

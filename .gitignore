@@ -1,0 +1,47 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Jenkins / runtime
+jenkins_home/
+*.log
+
+# Generated reports
+reports/
+zap-test/zap-report.html
+zap-test/*.json
+sca-test-java/dependency-check-report/
+
+# SonarQube local data
+sonarqube/data/
+sonarqube/logs/
+sonarqube/extensions/
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gitleaks test secrets
+gitleaks-test/config.env
+gitleaks-test/test-secret.txt
