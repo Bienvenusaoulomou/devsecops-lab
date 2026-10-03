@@ -31,6 +31,7 @@ pipeline {
                     set -e
 
                     echo "===== ENVIRONMENT ====="
+
                     echo "Python:"
                     python3 --version
 
@@ -117,6 +118,39 @@ pipeline {
                         Tests \
                         PASS \
                         "Application tests passed successfully." \
+                        true
+                '''
+            }
+        }
+
+        stage('SAST - Semgrep') {
+            steps {
+                echo '=== SAST - SEMGREP ==='
+
+                sh '''
+                    set -e
+
+                    mkdir -p reports/raw/semgrep
+
+                    echo "===== RUNNING SEMGREP ====="
+
+                    semgrep scan \
+                        --config auto \
+                        application \
+                        --json \
+                        > reports/raw/semgrep/semgrep.json
+
+                    echo "===== SEMGREP QUALITY GATE ====="
+
+                    python3 scripts/quality_gates/semgrep_gate.py
+                '''
+
+                sh '''
+                    python3 scripts/write_status.py \
+                        SAST_Semgrep \
+                        SAST \
+                        PASS \
+                        "Semgrep scan completed and quality gate passed." \
                         true
                 '''
             }
