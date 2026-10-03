@@ -155,6 +155,38 @@ pipeline {
                 '''
             }
         }
+
+        stage('SAST - Bandit') {
+            steps {
+                echo '=== SAST - BANDIT ==='
+
+                sh '''
+                    set -e
+
+                    mkdir -p reports/raw/bandit
+
+                    echo "===== RUNNING BANDIT ====="
+
+                    bandit \
+                        -r application/app \
+                        -f json \
+                        -o reports/raw/bandit/bandit.json
+
+                    echo "===== BANDIT QUALITY GATE ====="
+
+                    python3 scripts/quality_gates/bandit_gate.py
+                '''
+
+                sh '''
+                    python3 scripts/write_status.py \
+                        SAST_Bandit \
+                        SAST \
+                        PASS \
+                        "Bandit scan completed and quality gate passed." \
+                        true
+                '''
+            }
+        }
     }
 
     post {
