@@ -187,6 +187,38 @@ pipeline {
                 '''
             }
         }
+
+        stage('SCA - pip-audit') {
+            steps {
+                echo '=== SCA - PIP-AUDIT ==='
+
+                sh '''
+                    set -e
+
+                    mkdir -p reports/raw/pip-audit
+
+                    echo "===== RUNNING PIP-AUDIT ====="
+
+                    pip-audit \
+                        -r application/requirements.txt \
+                        --format json \
+                        --output reports/raw/pip-audit/pip-audit.json
+
+                    echo "===== PIP-AUDIT QUALITY GATE ====="
+
+                    python3 scripts/quality_gates/pip_audit_gate.py
+                '''
+
+                sh '''
+                    python3 scripts/write_status.py \
+                        SCA_Pip_Audit \
+                        SCA \
+                        PASS \
+                        "pip-audit scan completed and quality gate passed." \
+                        true
+                '''
+            }
+        }
     }
 
     post {
