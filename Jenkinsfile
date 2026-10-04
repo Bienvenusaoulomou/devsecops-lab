@@ -219,6 +219,51 @@ pipeline {
                 '''
             }
         }
+        stage('SCA - OWASP Dependency-Check') {
+    steps {
+        echo '=== SCA - OWASP DEPENDENCY-CHECK ==='
+
+        withCredentials([
+            string(
+                credentialsId: 'nvd-api-key',
+                variable: 'NVD_API_KEY'
+            )
+        ]) {
+            sh '''
+                set -e
+
+                mkdir -p reports/raw/dependency-check
+
+                echo "===== BUILDING JAVA TEST PROJECT ====="
+
+                mvn -f sca-test-java/pom.xml clean package -DskipTests
+
+                echo "===== RUNNING OWASP DEPENDENCY-CHECK ====="
+
+                dependency-check.sh \
+                    --project "devsecops-sca-java" \
+                    --scan sca-test-java \
+                    --nvdApiKey "$NVD_API_KEY" \
+                    --format JSON \
+                    --format HTML \
+                    --out reports/raw/dependency-check
+
+                echo "===== OWASP DEPENDENCY-CHECK QUALITY GATE ====="
+
+                python3 scripts/quality_gates/dependency_check_gate.py
+            '''
+        }
+
+        sh '''
+            python3 scripts/write_status.py \
+                SCA_OWASP_Dependency_Check \
+                SCA \
+                PASS \
+                "OWASP Dependency-Check scan completed and quality gate passed." \
+                true
+        '''
+    }
+}
     }
 
     post {

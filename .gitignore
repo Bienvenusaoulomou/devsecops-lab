@@ -45,3 +45,4 @@ Thumbs.db
 # Gitleaks test secrets
 gitleaks-test/config.env
 gitleaks-test/test-secret.txt
+sca-test-java/target/
