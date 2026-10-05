@@ -1,0 +1,42 @@
+env:
+  contexts:
+  - excludePaths: []
+    name: baseline
+    urls:
+    - http://devsecops-demo-app:8081
+
+  parameters:
+    failOnError: true
+    progressToStdout: false
+
+jobs:
+
+- parameters:
+    enableTags: false
+    maxAlertsPerRule: 10
+  type: passiveScan-config
+
+- parameters:
+    maxDuration: 1
+    url: http://devsecops-demo-app:8081
+  type: spider
+
+- parameters:
+    maxDuration: 0
+  type: passiveScan-wait
+
+- parameters:
+    reportDescription: ''
+    reportDir: /zap/wrk/
+    reportFile: zap.json
+    reportTitle: ZAP Security Report
+    template: traditional-json
+  type: report
+
+- parameters:
+    reportDescription: ''
+    reportDir: /zap/wrk/
+    reportFile: zap.html
+    reportTitle: ZAP Scanning Report
+    template: traditional-html
+  type: report

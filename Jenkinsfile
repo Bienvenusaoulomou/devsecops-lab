@@ -234,6 +234,15 @@ pipeline {
 
                 mkdir -p reports/raw/dependency-check
 
+                echo "===== NVD API KEY VALIDATION ====="
+
+                if [ -z "$NVD_API_KEY" ]; then
+                    echo "[ERROR] NVD_API_KEY is empty or was not injected by Jenkins."
+                    exit 1
+                fi
+
+                echo "[OK] NVD_API_KEY is injected by Jenkins."
+
                 echo "===== BUILDING JAVA TEST PROJECT ====="
 
                 mvn -f sca-test-java/pom.xml clean package -DskipTests
@@ -262,6 +271,83 @@ pipeline {
                 "OWASP Dependency-Check scan completed and quality gate passed." \
                 true
         '''
+    }
+}
+stage('DAST - OWASP ZAP') {
+    steps {
+        echo '=== DAST - OWASP ZAP ==='
+
+        sh '''
+            set -e
+
+            echo "===== DAST: APPLICATION AVAILABILITY ====="
+
+            docker run --rm \
+                --network devsecops-net \
+                curlimages/curl:latest \
+                --fail --silent --show-error \
+                http://devsecops-demo-app:8081/health
+
+            echo "===== DAST: PREPARING DIRECTORIES ====="
+
+            mkdir -p reports/raw/zap
+            mkdir -p reports/security
+
+            rm -f zap-test/zap.json
+            rm -f zap-test/zap.html
+            rm -f reports/raw/zap/zap.json
+            rm -f reports/raw/zap/zap.html
+
+            echo "===== DAST: RUNNING OWASP ZAP ====="
+
+            docker run --rm \
+                --network devsecops-net \
+                -v "$PWD/zap-test:/zap/wrk:rw" \
+                ghcr.io/zaproxy/zaproxy:stable \
+                zap.sh -cmd \
+                -autorun /zap/wrk/zap-ci.yaml
+
+            echo "===== DAST: VALIDATING ZAP OUTPUT ====="
+
+            test -f zap-test/zap.json
+            test -f zap-test/zap.html
+
+            echo "[OK] ZAP JSON report generated."
+            echo "[OK] ZAP HTML report generated."
+
+            echo "===== DAST: COPYING REPORTS ====="
+
+            cp zap-test/zap.json reports/raw/zap/zap.json
+            cp zap-test/zap.html reports/raw/zap/zap.html
+
+            echo "===== DAST: ZAP QUALITY GATE ====="
+
+            python3 scripts/quality_gates/zap_gate.py
+
+            echo "===== DAST: PUBLISHING SECURITY REPORTS ====="
+
+            cp reports/raw/zap/zap.json reports/security/zap.json
+            cp reports/raw/zap/zap.html reports/security/zap.html
+
+            echo "===== DAST COMPLETED SUCCESSFULLY ====="
+        '''
+
+        sh '''
+            python3 scripts/write_status.py \
+                DAST_OWASP_ZAP \
+                DAST \
+                PASS \
+                "OWASP ZAP DAST scan completed and security quality gate passed." \
+                true
+        '''
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'reports/raw/zap/*,reports/security/zap.*',
+                             allowEmptyArchive: true,
+                             fingerprint: true
+        }
     }
 }
     }
