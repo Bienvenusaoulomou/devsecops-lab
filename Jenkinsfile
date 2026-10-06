@@ -215,6 +215,8 @@ pipeline {
                 echo '=== SAST - SONARQUBE ==='
 
                 script {
+
+                    // 1. Exécuter l'analyse SonarQube
                     withSonarQubeEnv('sonarqube-local') {
 
                         sh '''
@@ -247,25 +249,27 @@ pipeline {
 
                             echo "===== SONARQUBE ANALYSIS COMPLETED ====="
                         '''
+                    }
 
-                        echo '=== WAITING FOR SONARQUBE QUALITY GATE ==='
+                    // 2. Attendre le Quality Gate APRÈS la fermeture de withSonarQubeEnv
+                    echo '=== WAITING FOR SONARQUBE QUALITY GATE ==='
 
-                        timeout(
-                            time: 5,
-                            unit: 'MINUTES'
-                        ) {
+                    timeout(
+                        time: 5,
+                        unit: 'MINUTES'
+                    ) {
 
-                            def qualityGate = waitForQualityGate()
+                        def qualityGate = waitForQualityGate()
 
-                            echo "SonarQube Quality Gate status: ${qualityGate.status}"
+                        echo "SonarQube Quality Gate status: ${qualityGate.status}"
 
-                            if (qualityGate.status != 'OK') {
-                                error("SonarQube Quality Gate failed: ${qualityGate.status}")
-                            }
+                        if (qualityGate.status != 'OK') {
+                            error("SonarQube Quality Gate failed: ${qualityGate.status}")
                         }
                     }
                 }
 
+                // 3. Enregistrer le résultat uniquement si tout est passé
                 sh '''
                     python3 scripts/write_status.py \
                         SAST_SonarQube \
