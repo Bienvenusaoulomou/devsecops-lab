@@ -298,11 +298,25 @@ stage('DAST - OWASP ZAP') {
             rm -f reports/raw/zap/zap.json
             rm -f reports/raw/zap/zap.html
 
+            echo "===== DAST: CHECKING ZAP CONFIG ====="
+
+            test -f zap-test/zap-ci.yaml
+            echo "[OK] zap-ci.yaml found in Jenkins workspace."
+
+            echo "===== DAST: VERIFYING ZAP DOCKER MOUNT ====="
+
+            docker run --rm \
+                -v "/var/lib/docker/volumes/devsecops_jenkins_home/_data/workspace/devsecops-lab/zap-test:/zap/wrk:ro" \
+                alpine:3.20 \
+                test -f /zap/wrk/zap-ci.yaml
+
+            echo "[OK] ZAP configuration is visible from Docker."
+
             echo "===== DAST: RUNNING OWASP ZAP ====="
 
             docker run --rm \
                 --network devsecops-net \
-                -v "$PWD/zap-test:/zap/wrk:rw" \
+                -v "/var/lib/docker/volumes/devsecops_jenkins_home/_data/workspace/devsecops-lab/zap-test:/zap/wrk:rw" \
                 ghcr.io/zaproxy/zaproxy:stable \
                 zap.sh -cmd \
                 -autorun /zap/wrk/zap-ci.yaml
@@ -350,6 +364,7 @@ stage('DAST - OWASP ZAP') {
         }
     }
 }
+
     }
 
     post {
