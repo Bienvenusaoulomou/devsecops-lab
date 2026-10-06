@@ -189,6 +189,69 @@ pipeline {
                 '''
             }
         }
+            stage('SAST - SonarQube') {
+              steps {
+                echo '=== SAST - SONARQUBE ==='
+
+                script {
+
+                    withSonarQubeEnv('sonarqube-local') {
+
+                        sh '''
+                            set -e
+
+                            mkdir -p reports/raw/sonarqube
+
+                            echo "===== RUNNING SONARQUBE ANALYSIS ====="
+
+                            sonar-scanner \
+                                -Dsonar.projectKey=devsecops-lab \
+                                -Dsonar.projectName=devsecops-lab \
+                                -Dsonar.sources=application \
+                                -Dsonar.exclusions="**/node_modules/**,**/.venv/**,**/venv/**,**/tests/**" \
+                                > reports/raw/sonarqube/sonar.log 2>&1
+
+                            cat reports/raw/sonarqube/sonar.log
+
+                            echo "===== SONARQUBE ANALYSIS COMPLETED ====="
+                        '''
+
+                        echo '=== WAITING FOR SONARQUBE QUALITY GATE ==='
+
+                        timeout(
+                            time: 5,
+                            unit: 'MINUTES'
+                        ) {
+
+                            def qualityGate = waitForQualityGate()
+
+                            echo "SonarQube Quality Gate status: ${qualityGate.status}"
+
+                            if (qualityGate.status != 'OK') {
+                                error("SonarQube Quality Gate failed: ${qualityGate.status}")
+                            }
+                        }
+                    }
+                }
+
+                sh '''
+                    python3 scripts/write_status.py \
+                        SAST_SonarQube \
+                        SAST \
+                        PASS \
+                        "SonarQube analysis completed and Quality Gate passed." \
+                        true
+                '''
+            }
+
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/raw/sonarqube/sonar.log',
+                                     allowEmptyArchive: true,
+                                     fingerprint: true
+                }
+            }
+        }
 
         stage('SCA - pip-audit') {
             steps {
