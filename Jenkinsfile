@@ -86,6 +86,7 @@ pipeline {
                     set -e
 
                     mkdir -p reports/raw
+                    mkdir -p reports/raw/coverage
 
                     rm -rf .venv-ci
 
@@ -94,7 +95,7 @@ pipeline {
 
                     python -m pip install --upgrade pip
                     python -m pip install -r application/requirements.txt
-                    python -m pip install pytest
+                    python -m pip install pytest pytest-cov
 
                     echo "===== PYTHON VERSION ====="
                     python --version
@@ -107,11 +108,22 @@ pipeline {
                     python -m pytest \
                         application/tests \
                         -v \
+                        --cov=application/app \
+                        --cov-report=term-missing \
+                        --cov-report=xml:reports/raw/coverage/coverage.xml \
                         > reports/raw/application-tests.log 2>&1
 
                     cat reports/raw/application-tests.log
 
                     echo "===== APPLICATION TESTS PASSED ====="
+
+                    echo "===== COVERAGE REPORT ====="
+
+                    test -f reports/raw/coverage/coverage.xml
+
+                    ls -lh reports/raw/coverage/coverage.xml
+
+                    echo "===== COVERAGE REPORT GENERATED SUCCESSFULLY ====="
                 '''
 
                 sh '''
@@ -119,9 +131,17 @@ pipeline {
                         Application_Tests \
                         Tests \
                         PASS \
-                        "Application tests passed successfully." \
+                        "Application tests passed successfully with coverage report." \
                         true
                 '''
+            }
+
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/raw/application-tests.log,reports/raw/coverage/coverage.xml',
+                                     allowEmptyArchive: true,
+                                     fingerprint: true
+                }
             }
         }
 
@@ -189,18 +209,29 @@ pipeline {
                 '''
             }
         }
-            stage('SAST - SonarQube') {
-              steps {
+
+        stage('SAST - SonarQube') {
+            steps {
                 echo '=== SAST - SONARQUBE ==='
 
                 script {
-
                     withSonarQubeEnv('sonarqube-local') {
 
                         sh '''
                             set -e
 
                             mkdir -p reports/raw/sonarqube
+
+                            echo "===== CHECKING COVERAGE REPORT ====="
+
+                            if [ ! -f reports/raw/coverage/coverage.xml ]; then
+                                echo "[ERROR] coverage.xml not found."
+                                exit 1
+                            fi
+
+                            echo "[OK] Coverage report found."
+
+                            ls -lh reports/raw/coverage/coverage.xml
 
                             echo "===== RUNNING SONARQUBE ANALYSIS ====="
 
@@ -209,6 +240,7 @@ pipeline {
                                 -Dsonar.projectName=devsecops-lab \
                                 -Dsonar.sources=application \
                                 -Dsonar.exclusions="**/node_modules/**,**/.venv/**,**/venv/**,**/tests/**" \
+                                -Dsonar.python.coverage.reportPaths=reports/raw/coverage/coverage.xml \
                                 > reports/raw/sonarqube/sonar.log 2>&1
 
                             cat reports/raw/sonarqube/sonar.log
@@ -246,7 +278,7 @@ pipeline {
 
             post {
                 always {
-                    archiveArtifacts artifacts: 'reports/raw/sonarqube/sonar.log',
+                    archiveArtifacts artifacts: 'reports/raw/sonarqube/sonar.log,reports/raw/coverage/coverage.xml',
                                      allowEmptyArchive: true,
                                      fingerprint: true
                 }
