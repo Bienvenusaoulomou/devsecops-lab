@@ -570,6 +570,16 @@ pipeline {
 
     post {
         always {
+            echo '=== GENERATING PIPELINE SECURITY SUMMARY ==='
+
+            sh '''
+                python3 scripts/generate_pipeline_summary.py
+            '''
+
+            archiveArtifacts artifacts: 'reports/status/*.json',
+                             allowEmptyArchive: true,
+                             fingerprint: true
+
             echo '=== CLEANUP ==='
 
             sh '''
