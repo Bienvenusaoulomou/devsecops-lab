@@ -364,6 +364,52 @@ stage('DAST - OWASP ZAP') {
         }
     }
 }
+stage('Secrets - Gitleaks') {
+    steps {
+        echo '=== SECRETS SCAN - GITLEAKS ==='
+        sh '''
+            set -e
+
+            echo "===== PREPARING GITLEAKS REPORT DIRECTORY ====="
+            mkdir -p reports/raw/gitleaks
+
+            rm -f reports/raw/gitleaks/gitleaks.json
+
+            echo "===== RUNNING GITLEAKS ====="
+            gitleaks detect \
+                --source . \
+                --report-format json \
+                --report-path reports/raw/gitleaks/gitleaks.json \
+                --redact \
+                --no-banner
+
+            echo "===== VALIDATING GITLEAKS REPORT ====="
+            test -f reports/raw/gitleaks/gitleaks.json
+
+            echo "===== GITLEAKS RESULTS ====="
+            cat reports/raw/gitleaks/gitleaks.json
+
+            echo "===== GITLEAKS COMPLETED SUCCESSFULLY ====="
+        '''
+
+        sh '''
+            python3 scripts/write_status.py \
+                Gitleaks \
+                Secrets \
+                PASS \
+                "Gitleaks secrets scan completed successfully with no secrets detected." \
+                true
+        '''
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'reports/raw/gitleaks/gitleaks.json',
+                             allowEmptyArchive: true,
+                             fingerprint: true
+        }
+    }
+}
 
     }
 
