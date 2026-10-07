@@ -874,102 +874,83 @@ pipeline {
 
                                 'Application_Tests': [
                                     label: 'Application Tests',
-                                    role: 'Validation fonctionnelle',
                                     icon: '🧪'
                                 ],
 
                                 'SAST_Semgrep': [
                                     label: 'Semgrep',
-                                    role: 'Analyse statique — SAST',
                                     icon: '🔍'
                                 ],
 
                                 'SAST_Bandit': [
                                     label: 'Bandit',
-                                    role: 'Analyse de sécurité Python — SAST',
                                     icon: '🐍'
                                 ],
 
                                 'SAST_SonarQube': [
                                     label: 'SonarQube',
-                                    role: 'Analyse statique et Quality Gate — SAST',
                                     icon: '📊'
                                 ],
 
                                 'SCA_Pip_Audit': [
                                     label: 'pip-audit',
-                                    role: 'Analyse des dépendances Python — SCA',
                                     icon: '📦'
                                 ],
 
                                 'SCA_OWASP_Dependency_Check': [
                                     label: 'Dependency-Check',
-                                    role: 'Analyse des dépendances Java — SCA',
                                     icon: '📦'
                                 ],
 
                                 'Gitleaks': [
                                     label: 'Gitleaks',
-                                    role: 'Détection de secrets',
                                     icon: '🔐'
                                 ],
 
                                 'Docker_Build': [
                                     label: 'Docker Build',
-                                    role: 'Construction de l’image conteneur',
                                     icon: '🐳'
                                 ],
 
                                 'Trivy': [
                                     label: 'Trivy',
-                                    role: 'Sécurité de l’image conteneur',
                                     icon: '🛡️'
                                 ],
 
                                 'Application_Start': [
                                     label: 'Application Start',
-                                    role: 'Démarrage et validation runtime',
                                     icon: '🚀'
                                 ],
 
                                 'DAST_OWASP_ZAP': [
                                     label: 'OWASP ZAP',
-                                    role: 'Analyse dynamique — DAST',
                                     icon: '🌐'
                                 ]
                             ]
 
                             // ====================================================
-                            // STATUS HELPERS
+                            // STATUS
                             // ====================================================
                             def statusEmoji = { status ->
+
                                 switch (status) {
+
                                     case 'PASS':
                                         return '🟢'
+
                                     case 'FAIL':
                                         return '🔴'
+
                                     case 'PENDING':
                                         return '⏳'
+
                                     default:
                                         return '⚪'
                                 }
                             }
 
-                            def statusLabel = { status ->
-                                switch (status) {
-                                    case 'PASS':
-                                        return 'PASS'
-                                    case 'FAIL':
-                                        return 'FAIL'
-                                    case 'PENDING':
-                                        return 'PENDING'
-                                    default:
-                                        return status ?: 'UNKNOWN'
-                                }
-                            }
-
                             // ====================================================
-                            // GLOBAL PIPELINE DATA
+                            // GLOBAL DATA
                             // ====================================================
                             def result =
                                 currentBuild.currentResult ?: 'SUCCESS'
@@ -1006,23 +987,16 @@ pipeline {
                             )
 
                             def decisionTitle
-                            def decisionMessage
 
                             if (pipelineApproved) {
 
                                 decisionTitle =
                                     '🟢 PIPELINE APPROUVÉ'
 
-                                decisionMessage =
-                                    'Tous les contrôles de sécurité sont passés. Aucun contrôle bloquant en échec.'
-
                             } else {
 
                                 decisionTitle =
                                     '🔴 PIPELINE BLOQUÉ'
-
-                                decisionMessage =
-                                    'Au moins un contrôle de sécurité a échoué ou reste en attente. Le pipeline ne peut pas être considéré comme sécurisé.'
                             }
 
                             // ====================================================
@@ -1031,6 +1005,7 @@ pipeline {
                             def buildEmoji
 
                             switch (result) {
+
                                 case 'SUCCESS':
                                     buildEmoji = '🟢'
                                     break
@@ -1048,20 +1023,20 @@ pipeline {
                             }
 
                             // ====================================================
-                            // SLACK MESSAGE — COMPACT / SINGLE MESSAGE
+                            // COMPACT SLACK MESSAGE
                             // ====================================================
                             def message = """
-🤖 *PIPELINE DEVSECOPS — BUILD #${env.BUILD_NUMBER}*
+🤖 *DEVSECOPS — BUILD #${env.BUILD_NUMBER}*
 
 📋 *EXÉCUTION*
-Projet : ${env.JOB_NAME} | Branche : ${env.GIT_BRANCH ?: 'main'} | Commit : ${(env.GIT_COMMIT ?: 'N/A').take(8)}
-Résultat : ${buildEmoji} ${result}
+${env.JOB_NAME} | ${env.GIT_BRANCH ?: 'main'} | ${(env.GIT_COMMIT ?: 'N/A').take(8)}
+Résultat : ${buildEmoji} *${result}*
 
-🛡️ *SCORECARD SÉCURITÉ*
-Score : *${score}%* | Couverture : *${coverage}%*
-Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : ${pending} | 🚫 Bloquants : ${blockingFailures}
+🛡️ *SCORECARD*
+Score *${score}%* | Couverture *${coverage}%*
+${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending} PENDING | 🚫 ${blockingFailures} bloquant(s)
 
-🔎 *CONTRÔLES DE SÉCURITÉ*
+🔎 *CONTRÔLES*
 """
 
                             // ====================================================
@@ -1069,15 +1044,20 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
                             // ====================================================
                             summary.results.each { control ->
 
-                                def name = control.control
-                                def status = control.status ?: 'UNKNOWN'
-                                def metrics = control.metrics ?: [:]
+                                def name =
+                                    control.control
 
-                                def info = controlInfo[name] ?: [
-                                    label: name,
-                                    role: 'Contrôle de sécurité',
-                                    icon: '🔹'
-                                ]
+                                def status =
+                                    control.status ?: 'UNKNOWN'
+
+                                def metrics =
+                                    control.metrics ?: [:]
+
+                                def info =
+                                    controlInfo[name] ?: [
+                                        label: name,
+                                        icon: '🔹'
+                                    ]
 
                                 def metricsText = ''
 
@@ -1088,7 +1068,6 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
                                         metricsText =
                                             "${metrics.passed ?: 0}/${metrics.tests ?: 0} tests · " +
                                             "Coverage ${metrics.coverage_percent ?: 0}% · " +
-                                            "${metrics.lines_covered ?: 0}/${metrics.lines_valid ?: 0} lignes · " +
                                             "${metrics.warnings ?: 0} warning(s)"
 
                                         break
@@ -1097,8 +1076,8 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
 
                                         metricsText =
                                             "${metrics.findings ?: 0} findings · " +
-                                            "Error ${metrics.error ?: 0} · " +
-                                            "Warning ${metrics.warning ?: 0}"
+                                            "E${metrics.error ?: 0} · " +
+                                            "W${metrics.warning ?: 0}"
 
                                         break
 
@@ -1106,24 +1085,24 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
 
                                         metricsText =
                                             "${metrics.findings ?: 0} findings · " +
-                                            "High ${metrics.high ?: 0} · " +
-                                            "Medium ${metrics.medium ?: 0} · " +
-                                            "Low ${metrics.low ?: 0}"
+                                            "H${metrics.high ?: 0} · " +
+                                            "M${metrics.medium ?: 0} · " +
+                                            "L${metrics.low ?: 0}"
 
                                         break
 
                                     case 'SAST_SonarQube':
 
                                         metricsText =
-                                            "Quality Gate : ${metrics.quality_gate ?: 'UNKNOWN'}"
+                                            "Quality Gate ${metrics.quality_gate ?: 'UNKNOWN'}"
 
                                         break
 
                                     case 'SCA_Pip_Audit':
 
                                         metricsText =
-                                            "${metrics.dependencies ?: 0} dépendances · " +
-                                            "${metrics.vulnerable_dependencies ?: 0} vulnérable(s) · " +
+                                            "${metrics.dependencies ?: 0} deps · " +
+                                            "${metrics.vulnerable_dependencies ?: 0} vuln. · " +
                                             "${metrics.vulnerabilities ?: 0} CVE"
 
                                         break
@@ -1131,17 +1110,17 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
                                     case 'SCA_OWASP_Dependency_Check':
 
                                         metricsText =
-                                            "${metrics.artifacts ?: 0} artifact(s) · " +
-                                            "${metrics.vulnerabilities ?: 0} vulnérabilité(s) · " +
-                                            "Critical ${metrics.critical ?: 0} · " +
-                                            "High ${metrics.high ?: 0}"
+                                            "${metrics.artifacts ?: 0} artifact · " +
+                                            "${metrics.vulnerabilities ?: 0} vuln. · " +
+                                            "C${metrics.critical ?: 0} · " +
+                                            "H${metrics.high ?: 0}"
 
                                         break
 
                                     case 'Gitleaks':
 
                                         metricsText =
-                                            "${metrics.secrets ?: 0} secret(s) détecté(s)"
+                                            "${metrics.secrets ?: 0} secret(s)"
 
                                         break
 
@@ -1154,24 +1133,24 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
                                             metrics.tag ?: env.BUILD_NUMBER
 
                                         metricsText =
-                                            "Image ${imageName}:${imageTag}"
+                                            "${imageName}:${imageTag}"
 
                                         break
 
                                     case 'Trivy':
 
                                         metricsText =
-                                            "Critical ${metrics.critical ?: 0} · " +
-                                            "High ${metrics.high ?: 0} · " +
-                                            "Medium ${metrics.medium ?: 0} · " +
-                                            "Low ${metrics.low ?: 0}"
+                                            "C${metrics.critical ?: 0} · " +
+                                            "H${metrics.high ?: 0} · " +
+                                            "M${metrics.medium ?: 0} · " +
+                                            "L${metrics.low ?: 0}"
 
                                         break
 
                                     case 'Application_Start':
 
                                         metricsText =
-                                            "Health check : ${metrics.health_check ?: 'UNKNOWN'}"
+                                            "Health ${metrics.health_check ?: 'UNKNOWN'}"
 
                                         break
 
@@ -1179,48 +1158,43 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
 
                                         metricsText =
                                             "${metrics.alerts ?: 0} alert(s) · " +
-                                            "High ${metrics.high ?: 0} · " +
-                                            "Medium ${metrics.medium ?: 0} · " +
-                                            "Low ${metrics.low ?: 0}"
+                                            "H${metrics.high ?: 0} · " +
+                                            "M${metrics.medium ?: 0} · " +
+                                            "L${metrics.low ?: 0}"
 
                                         break
 
                                     default:
 
                                         metricsText =
-                                            'Métriques disponibles dans le rapport centralisé'
+                                            'N/A'
                                 }
 
                                 message +=
-                                    "${info.icon} *${info.label}* — _${info.role}_\n" +
-                                    "${statusEmoji(status)} *${statusLabel(status)}* · ${metricsText}\n"
+                                    "${info.icon} *${info.label}* : " +
+                                    "${statusEmoji(status)} ${status} · ${metricsText}\n"
                             }
 
                             // ====================================================
-                            // FINAL DECISION + EVIDENCE
+                            // FINAL DECISION
                             // ====================================================
                             message += """
 
-🚦 *DÉCISION DU PIPELINE*
+🚦 *DÉCISION*
 ${decisionTitle}
-${decisionMessage}
 
-📊 *PREUVES DE SÉCURITÉ*
-Rapports : reports/status/ | reports/raw/ | reports/security/
-Synthèse : reports/status/pipeline-summary.json
+🔗 ${env.BUILD_URL}
 
-🔗 *JENKINS BUILD*
-${env.BUILD_URL}
-
-🤖 Généré automatiquement par *DevsecopsAI*
+🤖 *DevsecopsAI*
 """
 
                             // ====================================================
-                            // SLACK SEND
+                            // SLACK COLOR
                             // ====================================================
                             def slackColor
 
                             switch (result) {
+
                                 case 'SUCCESS':
                                     slackColor = 'good'
                                     break
@@ -1237,6 +1211,9 @@ ${env.BUILD_URL}
                                     slackColor = '#808080'
                             }
 
+                            // ====================================================
+                            // SEND SLACK
+                            // ====================================================
                             slackSend(
                                 channel: 'devsecops-alerts',
                                 color: slackColor,
