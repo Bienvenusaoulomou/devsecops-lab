@@ -986,4 +986,6 @@ ${env.BUILD_URL}
 
         echo '=== PIPELINE EXECUTION FINISHED ==='
     }
+
+}
 }
