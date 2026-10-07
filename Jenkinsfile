@@ -1014,7 +1014,7 @@ pipeline {
                                     '🟢 PIPELINE APPROUVÉ'
 
                                 decisionMessage =
-                                    'Tous les contrôles de sécurité sont passés. Aucun gate bloquant en échec.'
+                                    'Tous les contrôles de sécurité sont passés. Aucun contrôle bloquant en échec.'
 
                             } else {
 
@@ -1022,7 +1022,7 @@ pipeline {
                                     '🔴 PIPELINE BLOQUÉ'
 
                                 decisionMessage =
-                                    'Au moins un contrôle bloquant a échoué ou reste en attente. Le pipeline ne peut pas être considéré comme sécurisé.'
+                                    'Au moins un contrôle de sécurité a échoué ou reste en attente. Le pipeline ne peut pas être considéré comme sécurisé.'
                             }
 
                             // ====================================================
@@ -1078,9 +1078,6 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
                                     role: 'Contrôle de sécurité',
                                     icon: '🔹'
                                 ]
-
-                                // Tous les contrôles sont des gates bloquants
-                                def gateLabel = 'GATE BLOQUANT'
 
                                 def metricsText = ''
 
@@ -1196,7 +1193,7 @@ Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : $
 
                                 message +=
                                     "${info.icon} *${info.label}* — _${info.role}_\n" +
-                                    "${statusEmoji(status)} *${statusLabel(status)} · ${gateLabel}* · ${metricsText}\n"
+                                    "${statusEmoji(status)} *${statusLabel(status)}* · ${metricsText}\n"
                             }
 
                             // ====================================================
@@ -1261,7 +1258,8 @@ ${env.BUILD_URL}
                     currentBuild.result = 'UNSTABLE'
                 }
             }
-                 echo '=== PIPELINE EXECUTION FINISHED ==='
+
+            echo '=== PIPELINE EXECUTION FINISHED ==='
         }
     }
 }
