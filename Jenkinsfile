@@ -16,12 +16,22 @@ pipeline {
 
     stages {
 
+        // ============================================================
+        // CHECKOUT
+        // ============================================================
+
         stage('Checkout') {
             steps {
                 echo '=== CHECKOUT ==='
+
                 checkout scm
             }
         }
+
+
+        // ============================================================
+        // ENVIRONMENT VALIDATION
+        // ============================================================
 
         stage('Environment - Validation') {
             steps {
@@ -78,6 +88,11 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // APPLICATION TESTS
+        // ============================================================
+
         stage('Application - Tests') {
             steps {
                 echo '=== APPLICATION TESTS ==='
@@ -131,19 +146,26 @@ pipeline {
                         Application_Tests \
                         Tests \
                         PASS \
-                        "Application tests passed successfully with coverage report." \
+                        "Application tests completed successfully." \
                         true
                 '''
             }
 
             post {
                 always {
-                    archiveArtifacts artifacts: 'reports/raw/application-tests.log,reports/raw/coverage/coverage.xml',
-                                     allowEmptyArchive: true,
-                                     fingerprint: true
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/application-tests.log,reports/raw/coverage/coverage.xml',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
                 }
             }
         }
+
+
+        // ============================================================
+        // SAST - SEMGREP
+        // ============================================================
 
         stage('SAST - Semgrep') {
             steps {
@@ -162,9 +184,13 @@ pipeline {
                         --json \
                         > reports/raw/semgrep/semgrep.json
 
+                    test -f reports/raw/semgrep/semgrep.json
+
                     echo "===== SEMGREP QUALITY GATE ====="
 
                     python3 scripts/quality_gates/semgrep_gate.py
+
+                    echo "===== SEMGREP QUALITY GATE PASSED ====="
                 '''
 
                 sh '''
@@ -176,7 +202,22 @@ pipeline {
                         true
                 '''
             }
+
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/semgrep/semgrep.json',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
+                }
+            }
         }
+
+
+        // ============================================================
+        // SAST - BANDIT
+        // ============================================================
 
         stage('SAST - Bandit') {
             steps {
@@ -194,9 +235,13 @@ pipeline {
                         -f json \
                         -o reports/raw/bandit/bandit.json
 
+                    test -f reports/raw/bandit/bandit.json
+
                     echo "===== BANDIT QUALITY GATE ====="
 
                     python3 scripts/quality_gates/bandit_gate.py
+
+                    echo "===== BANDIT QUALITY GATE PASSED ====="
                 '''
 
                 sh '''
@@ -208,7 +253,22 @@ pipeline {
                         true
                 '''
             }
+
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/bandit/bandit.json',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
+                }
+            }
         }
+
+
+        // ============================================================
+        // SAST - SONARQUBE
+        // ============================================================
 
         stage('SAST - SonarQube') {
             steps {
@@ -216,7 +276,6 @@ pipeline {
 
                 script {
 
-                    // 1. Exécuter l'analyse SonarQube
                     withSonarQubeEnv('sonarqube-local') {
 
                         sh '''
@@ -251,7 +310,6 @@ pipeline {
                         '''
                     }
 
-                    // 2. Attendre le Quality Gate APRÈS la fermeture de withSonarQubeEnv
                     echo '=== WAITING FOR SONARQUBE QUALITY GATE ==='
 
                     timeout(
@@ -269,7 +327,6 @@ pipeline {
                     }
                 }
 
-                // 3. Enregistrer le résultat uniquement si tout est passé
                 sh '''
                     python3 scripts/write_status.py \
                         SAST_SonarQube \
@@ -282,12 +339,19 @@ pipeline {
 
             post {
                 always {
-                    archiveArtifacts artifacts: 'reports/raw/sonarqube/sonar.log,reports/raw/coverage/coverage.xml',
-                                     allowEmptyArchive: true,
-                                     fingerprint: true
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/sonarqube/sonar.log,reports/raw/coverage/coverage.xml',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
                 }
             }
         }
+
+
+        // ============================================================
+        // SCA - PIP-AUDIT
+        // ============================================================
 
         stage('SCA - pip-audit') {
             steps {
@@ -305,9 +369,13 @@ pipeline {
                         --format json \
                         --output reports/raw/pip-audit/pip-audit.json
 
+                    test -f reports/raw/pip-audit/pip-audit.json
+
                     echo "===== PIP-AUDIT QUALITY GATE ====="
 
                     python3 scripts/quality_gates/pip_audit_gate.py
+
+                    echo "===== PIP-AUDIT QUALITY GATE PASSED ====="
                 '''
 
                 sh '''
@@ -319,7 +387,22 @@ pipeline {
                         true
                 '''
             }
+
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/pip-audit/pip-audit.json',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
+                }
+            }
         }
+
+
+        // ============================================================
+        // SCA - OWASP DEPENDENCY-CHECK
+        // ============================================================
 
         stage('SCA - OWASP Dependency-Check') {
             steps {
@@ -331,6 +414,7 @@ pipeline {
                         variable: 'NVD_API_KEY'
                     )
                 ]) {
+
                     sh '''
                         set -e
 
@@ -359,9 +443,13 @@ pipeline {
                             --format HTML \
                             --out reports/raw/dependency-check
 
+                        test -f reports/raw/dependency-check/dependency-check-report.json
+
                         echo "===== OWASP DEPENDENCY-CHECK QUALITY GATE ====="
 
                         python3 scripts/quality_gates/dependency_check_gate.py
+
+                        echo "===== DEPENDENCY-CHECK QUALITY GATE PASSED ====="
                     '''
                 }
 
@@ -374,7 +462,22 @@ pipeline {
                         true
                 '''
             }
+
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/dependency-check/dependency-check-report.json,reports/raw/dependency-check/dependency-check-report.html',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
+                }
+            }
         }
+
+
+        // ============================================================
+        // SECRETS - GITLEAKS
+        // ============================================================
 
         stage('Secrets - Gitleaks') {
             steps {
@@ -419,12 +522,19 @@ pipeline {
 
             post {
                 always {
-                    archiveArtifacts artifacts: 'reports/raw/gitleaks/gitleaks.json',
-                                     allowEmptyArchive: true,
-                                     fingerprint: true
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/gitleaks/gitleaks.json',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
                 }
             }
         }
+
+
+        // ============================================================
+        // DOCKER BUILD
+        // ============================================================
 
         stage('Docker - Build Image') {
             steps {
@@ -464,6 +574,11 @@ pipeline {
             }
         }
 
+
+        // ============================================================
+        // CONTAINER SECURITY - TRIVY
+        // ============================================================
+
         stage('Container Security - Trivy') {
             steps {
                 echo '=== CONTAINER SECURITY - TRIVY ==='
@@ -479,18 +594,21 @@ pipeline {
 
                     trivy --version
 
-                    echo "===== TRIVY IMAGE SCAN ====="
+                    echo "===== TRIVY FULL VULNERABILITY REPORT ====="
 
                     trivy image \
-                        --severity HIGH,CRITICAL \
+                        --scanners vuln \
                         --ignore-unfixed \
                         --format json \
                         --output reports/raw/trivy/trivy.json \
                         "$APP_IMAGE:$BUILD_NUMBER"
 
+                    test -f reports/raw/trivy/trivy.json
+
                     echo "===== TRIVY SECURITY QUALITY GATE ====="
 
                     trivy image \
+                        --scanners vuln \
                         --severity HIGH,CRITICAL \
                         --ignore-unfixed \
                         --exit-code 1 \
@@ -504,19 +622,26 @@ pipeline {
                         Trivy \
                         Container_Security \
                         PASS \
-                        "Trivy container scan completed with no blocking HIGH or CRITICAL vulnerabilities." \
+                        "Trivy container scan completed and quality gate passed." \
                         true
                 '''
             }
 
             post {
                 always {
-                    archiveArtifacts artifacts: 'reports/raw/trivy/trivy.json',
-                                     allowEmptyArchive: true,
-                                     fingerprint: true
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/trivy/trivy.json',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
                 }
             }
         }
+
+
+        // ============================================================
+        // APPLICATION START
+        // ============================================================
 
         stage('Application - Start') {
             steps {
@@ -552,6 +677,7 @@ pipeline {
                         fi
 
                         echo "Waiting for application... attempt $i/30"
+
                         sleep 2
                     done
 
@@ -572,6 +698,11 @@ pipeline {
                 '''
             }
         }
+
+
+        // ============================================================
+        // DAST - OWASP ZAP
+        // ============================================================
 
         stage('DAST - OWASP ZAP') {
             steps {
@@ -659,333 +790,528 @@ pipeline {
 
             post {
                 always {
-                    archiveArtifacts artifacts: 'reports/raw/zap/*,reports/security/zap.*',
-                                     allowEmptyArchive: true,
-                                     fingerprint: true
+                    archiveArtifacts(
+                        artifacts: 'reports/raw/zap/*,reports/security/zap.*',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
                 }
             }
         }
     }
 
-post {
 
-    always {
+    // ================================================================
+    // PIPELINE POST
+    // ================================================================
 
-        // ============================================================
-        // GENERATE PIPELINE SECURITY SUMMARY
-        // ============================================================
+    post {
 
-        echo '=== GENERATING PIPELINE SECURITY SUMMARY ==='
+        always {
 
-        sh '''
-            python3 scripts/generate_pipeline_summary.py
-        '''
+            // ========================================================
+            // GENERATE PIPELINE SECURITY SUMMARY
+            // ========================================================
 
-        // ============================================================
-        // ARCHIVE SECURITY REPORTS
-        // ============================================================
+            echo '=== GENERATING PIPELINE SECURITY SUMMARY ==='
 
-        archiveArtifacts(
-            artifacts: 'reports/status/*.json',
-            allowEmptyArchive: true,
-            fingerprint: true
-        )
+            sh '''
+                python3 scripts/generate_pipeline_summary.py
+            '''
 
-        // ============================================================
-        // CLEANUP APPLICATION CONTAINER
-        // ============================================================
 
-        echo '=== CLEANUP ==='
+            // ========================================================
+            // ARCHIVE SECURITY SUMMARY
+            // ========================================================
 
-        sh '''
-            echo "===== REMOVING APPLICATION CONTAINER ====="
+            archiveArtifacts(
+                artifacts: 'reports/status/*.json',
+                allowEmptyArchive: true,
+                fingerprint: true
+            )
 
-            docker rm -f "$APP_CONTAINER" 2>/dev/null || true
 
-            echo "===== CLEANUP COMPLETED ====="
-        '''
+            // ========================================================
+            // CLEANUP APPLICATION CONTAINER
+            // ========================================================
 
-        // ============================================================
-        // SLACK DEVSECOPS REPORT
-        // ============================================================
+            echo '=== CLEANUP ==='
 
-        script {
+            sh '''
+                echo "===== REMOVING APPLICATION CONTAINER ====="
 
-            echo '=== SENDING DEVSECOPS SLACK REPORT ==='
+                docker rm -f "$APP_CONTAINER" 2>/dev/null || true
 
-            if (!fileExists('reports/status/pipeline-summary.json')) {
+                echo "===== CLEANUP COMPLETED ====="
+            '''
 
-                echo 'Slack notification skipped: pipeline summary not found.'
 
-            } else {
+            // ========================================================
+            // SLACK DEVSECOPS REPORT
+            // ========================================================
 
-                try {
+            script {
 
-                    // ------------------------------------------------
-                    // READ CENTRALIZED SECURITY SUMMARY
-                    // ------------------------------------------------
+                echo '=== SENDING DEVSECOPS SLACK REPORT ==='
 
-                    def summaryText = readFile(
-                        file: 'reports/status/pipeline-summary.json'
-                    )
+                if (!fileExists('reports/status/pipeline-summary.json')) {
 
-                    def summary =
-                        new groovy.json.JsonSlurper().parseText(summaryText)
+                    echo 'Slack notification skipped: pipeline summary not found.'
 
-                    // ------------------------------------------------
-                    // GLOBAL PIPELINE INFORMATION
-                    // ------------------------------------------------
+                } else {
 
-                    def buildResult =
-                        currentBuild.currentResult ?: 'UNKNOWN'
+                    try {
 
-                    def total =
-                        (summary.total ?: 0) as int
+                        // ====================================================
+                        // READ CENTRALIZED SUMMARY
+                        // ====================================================
 
-                    def passed =
-                        (summary.pass ?: 0) as int
+                        def summary = readJSON(
+                            file: 'reports/status/pipeline-summary.json'
+                        )
 
-                    def failed =
-                        (summary.fail ?: 0) as int
 
-                    def pending =
-                        (summary.pending ?: 0) as int
+                        // ====================================================
+                        // CONTROL INFORMATION
+                        // ====================================================
 
-                    def blocking =
-                        (summary.blocking_failures ?: 0) as int
+                        def controlInfo = [
 
-                    def score =
-                        summary.control_score != null
-                            ? summary.control_score.toString()
-                            : 'N/A'
+                            'Application_Tests': [
+                                label: 'APPLICATION TESTS',
+                                role: 'Validation fonctionnelle',
+                                icon: '🧪'
+                            ],
 
-                    def coverage =
-                        summary.evaluation_coverage != null
-                            ? summary.evaluation_coverage.toString()
-                            : 'N/A'
+                            'SAST_Semgrep': [
+                                label: 'SEMGREP',
+                                role: 'Analyse statique — SAST',
+                                icon: '🔍'
+                            ],
 
-                    // ------------------------------------------------
-                    // PIPELINE RESULT
-                    // ------------------------------------------------
+                            'SAST_Bandit': [
+                                label: 'BANDIT',
+                                role: 'Analyse de sécurité Python — SAST',
+                                icon: '🐍'
+                            ],
 
-                    def resultEmoji
+                            'SAST_SonarQube': [
+                                label: 'SONARQUBE',
+                                role: 'Analyse statique et Quality Gate — SAST',
+                                icon: '📊'
+                            ],
 
-                    if (
-                        blocking > 0 ||
-                        buildResult == 'FAILURE'
-                    ) {
-
-                        resultEmoji = ':x:'
-
-                    } else if (
-                        failed > 0 ||
-                        buildResult == 'UNSTABLE'
-                    ) {
-
-                        resultEmoji = ':warning:'
-
-                    } else if (
-                        buildResult == 'SUCCESS'
-                    ) {
-
-                        resultEmoji = ':white_check_mark:'
-
-                    } else {
-
-                        resultEmoji = ':grey_question:'
-                    }
-
-                    // ------------------------------------------------
-                    // SLACK HEADER
-                    // ------------------------------------------------
-
-                    def message = """
-${resultEmoji} *DEVSECOPS PIPELINE — BUILD #${env.BUILD_NUMBER}*
-
-*Project:* `${env.JOB_NAME}`
-*Branch:* `${env.BRANCH_NAME ?: 'main'}`
-*Commit:* `${env.GIT_COMMIT ?: 'N/A'}`
-*Result:* *${buildResult}*
-
-━━━━━━━━━━━━━━━━━━━━
-
-*SECURITY SUMMARY*
-
-:shield: *Control Score:* ${score}%
-:bar_chart: *Evaluation Coverage:* ${coverage}%
-
-:white_check_mark: *PASS:* ${passed}
-:x: *FAIL:* ${failed}
-:hourglass_flowing_sand: *PENDING:* ${pending}
-:no_entry: *Blocking failures:* ${blocking}
-
-*Controls evaluated:* ${total}
-
-━━━━━━━━━━━━━━━━━━━━
-
-*SECURITY CONTROLS*
-"""
-
-                    // ------------------------------------------------
-                    // DYNAMIC SECURITY CONTROLS
-                    // ------------------------------------------------
-
-                    def results =
-                        summary.results ?: []
-
-                    results.each { control ->
-
-                        def name =
-                            control.control ?:
-                            control.name ?:
-                            control.id ?:
-                            'Unknown'
-
-                        def status =
-                            (
-                                control.status ?: 'UNKNOWN'
-                            ).toString().toUpperCase()
-
-                        def isBlocking =
-                            control.blocking == true
-
-                        def statusEmoji
-
-                        switch (status) {
-
-                            case 'PASS':
-
-                                statusEmoji =
-                                    ':white_check_mark:'
-
-                                break
-
-                            case 'FAIL':
-
-                                statusEmoji =
-                                    isBlocking
-                                        ? ':no_entry:'
-                                        : ':x:'
-
-                                break
-
-                            case 'PENDING':
-
-                                statusEmoji =
-                                    ':hourglass_flowing_sand:'
-
-                                break
-
-                            default:
-
-                                statusEmoji =
-                                    ':grey_question:'
+                            'SCA_Pip_Audit': [
+                                label: 'PIP-AUDIT',
+                                role: 'Analyse des dépendances Python — SCA',
+                                icon: '📦'
+                            ],
+
+                            'SCA_OWASP_Dependency_Check': [
+                                label: 'OWASP DEPENDENCY-CHECK',
+                                role: 'Analyse des dépendances Java — SCA',
+                                icon: '📦'
+                            ],
+
+                            'Gitleaks': [
+                                label: 'GITLEAKS',
+                                role: 'Détection de secrets',
+                                icon: '🔐'
+                            ],
+
+                            'Docker_Build': [
+                                label: 'DOCKER BUILD',
+                                role: 'Construction de l’image conteneur',
+                                icon: '🐳'
+                            ],
+
+                            'Trivy': [
+                                label: 'TRIVY',
+                                role: 'Sécurité de l’image conteneur',
+                                icon: '🛡️'
+                            ],
+
+                            'Application_Start': [
+                                label: 'APPLICATION START',
+                                role: 'Démarrage et validation runtime',
+                                icon: '🚀'
+                            ],
+
+                            'DAST_OWASP_ZAP': [
+                                label: 'OWASP ZAP',
+                                role: 'Analyse dynamique — DAST',
+                                icon: '🌐'
+                            ]
+                        ]
+
+
+                        // ====================================================
+                        // STATUS HELPERS
+                        // ====================================================
+
+                        def statusEmoji = { status ->
+
+                            switch (status?.toString()?.toUpperCase()) {
+
+                                case 'PASS':
+                                    return '✅'
+
+                                case 'FAIL':
+                                    return '❌'
+
+                                case 'PENDING':
+                                    return '⏳'
+
+                                case 'WARNING':
+                                    return '⚠️'
+
+                                default:
+                                    return '❓'
+                            }
                         }
 
-                        def gateLabel =
-                            isBlocking
-                                ? ' — *GATE*'
-                                : ''
 
-                        message +=
-                            "${statusEmoji} *${name}* — ${status}${gateLabel}\n"
-                    }
+                        def statusLabel = { status ->
 
-                    // ------------------------------------------------
-                    // BLOCKING FAILURES
-                    // ------------------------------------------------
+                            switch (status?.toString()?.toUpperCase()) {
 
-                    def blockingControls =
-                        results.findAll { control ->
+                                case 'PASS':
+                                    return 'RÉUSSI'
 
-                            control.status
-                                ?.toString()
-                                ?.toUpperCase() == 'FAIL' &&
+                                case 'FAIL':
+                                    return 'ÉCHEC'
 
-                            control.blocking == true
+                                case 'PENDING':
+                                    return 'EN ATTENTE'
+
+                                case 'WARNING':
+                                    return 'AVERTISSEMENT'
+
+                                default:
+                                    return 'INCONNU'
+                            }
                         }
 
-                    if (blockingControls) {
 
-                        message += """
+                        // ====================================================
+                        // DYNAMIC INTERPRETATION
+                        // ====================================================
 
-━━━━━━━━━━━━━━━━━━━━
+                        def interpretation = {
+                            control,
+                            status,
+                            blocking,
+                            rawMessage ->
 
-:no_entry: *BLOCKING FAILURES*
+                            def messageText =
+                                rawMessage ?:
+                                'Aucun détail supplémentaire disponible.'
+
+                            switch (status?.toString()?.toUpperCase()) {
+
+                                case 'PASS':
+
+                                    return "➡️ ${messageText}"
+
+                                case 'FAIL':
+
+                                    if (blocking) {
+
+                                        return "➡️ ${messageText} Le contrôle est bloquant : le pipeline est arrêté."
+
+                                    } else {
+
+                                        return "➡️ ${messageText} Le contrôle n'est pas bloquant."
+                                    }
+
+                                case 'WARNING':
+
+                                    return "➡️ ${messageText} Une attention particulière est requise."
+
+                                case 'PENDING':
+
+                                    return "➡️ ${messageText} Le contrôle n'a pas pu être évalué complètement."
+
+                                default:
+
+                                    return "➡️ ${messageText}"
+                            }
+                        }
+
+
+                        // ====================================================
+                        // GLOBAL PIPELINE DATA
+                        // ====================================================
+
+                        def result =
+                            currentBuild.currentResult ?: 'UNKNOWN'
+
+                        def passed =
+                            summary.pass ?: 0
+
+                        def failed =
+                            summary.fail ?: 0
+
+                        def pending =
+                            summary.pending ?: 0
+
+                        def blockingFailures =
+                            summary.blocking_failures ?: 0
+
+                        def total =
+                            summary.total ?: 0
+
+                        def score =
+                            summary.control_score ?: 0
+
+                        def coverage =
+                            summary.evaluation_coverage ?: 0
+
+
+                        // ====================================================
+                        // PIPELINE DECISION
+                        // ====================================================
+
+                        def pipelineApproved = (
+                            result == 'SUCCESS' &&
+                            blockingFailures == 0 &&
+                            failed == 0 &&
+                            pending == 0
+                        )
+
+
+                        def decisionTitle
+                        def decisionMessage
+
+
+                        if (pipelineApproved) {
+
+                            decisionTitle =
+                                '✅ PIPELINE APPROUVÉ'
+
+                            decisionMessage =
+                                'Tous les contrôles obligatoires ont été évalués avec succès. Aucun échec bloquant détecté.'
+
+                        } else if (blockingFailures > 0) {
+
+                            decisionTitle =
+                                '🚫 PIPELINE BLOQUÉ'
+
+                            decisionMessage =
+                                "${blockingFailures} échec(s) bloquant(s) détecté(s). Le pipeline ne peut pas poursuivre normalement."
+
+                        } else if (failed > 0) {
+
+                            decisionTitle =
+                                '❌ PIPELINE EN ÉCHEC'
+
+                            decisionMessage =
+                                "${failed} contrôle(s) en échec. La validation globale du pipeline est négative."
+
+                        } else if (pending > 0) {
+
+                            decisionTitle =
+                                '⚠️ PIPELINE NON VALIDÉ'
+
+                            decisionMessage =
+                                "${pending} contrôle(s) n'ont pas pu être évalués complètement. La couverture de sécurité est incomplète."
+
+                        } else {
+
+                            decisionTitle =
+                                '⚠️ PIPELINE À VÉRIFIER'
+
+                            decisionMessage =
+                                'L’état global du pipeline nécessite une vérification.'
+                        }
+
+
+                        // ====================================================
+                        // BUILD RESULT
+                        // ====================================================
+
+                        def buildEmoji
+
+                        if (result == 'SUCCESS') {
+
+                            buildEmoji = '✅'
+
+                        } else if (result == 'FAILURE') {
+
+                            buildEmoji = '❌'
+
+                        } else {
+
+                            buildEmoji = '⚠️'
+                        }
+
+
+                        // ====================================================
+                        // INITIAL SLACK MESSAGE
+                        // ====================================================
+
+                        def message = """
+🤖 *PIPELINE DEVSECOPS — BUILD #${env.BUILD_NUMBER}*
+
+📋 *EXÉCUTION*
+
+Projet        : ${env.JOB_NAME}
+Branche       : ${env.GIT_BRANCH ?: 'main'}
+Commit        : ${(env.GIT_COMMIT ?: 'N/A').take(8)}
+Résultat      : ${buildEmoji} ${result}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🛡️ *SCORECARD SÉCURITÉ*
+
+Score des contrôles     : *${score}%*
+Couverture d'évaluation : *${coverage}%*
+
+Total              : ${total}
+✅ Réussis          : ${passed}
+❌ Échecs           : ${failed}
+⏳ En attente       : ${pending}
+🚫 Échecs bloquants : ${blockingFailures}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔎 *CONTRÔLES DE SÉCURITÉ*
 """
 
-                        blockingControls.each { control ->
+
+                        // ====================================================
+                        // CONTROL DETAILS
+                        // ====================================================
+
+                        def results =
+                            summary.results ?: []
+
+
+                        results.each { control ->
 
                             def name =
-                                control.control ?:
-                                control.name ?:
-                                control.id ?:
-                                'Unknown'
+                                control.control ?: 'Unknown'
 
-                            def reason =
+                            def status =
+                                (control.status ?: 'PENDING')
+                                .toString()
+                                .toUpperCase()
+
+                            def blocking =
+                                control.blocking == true
+
+                            def rawMessage =
                                 control.message ?:
-                                control.description ?:
-                                'No reason provided.'
+                                'Aucun détail disponible.'
 
-                            message +=
-                                "• *${name}*: ${reason}\n"
-                        }
-                    }
+                            def info =
+                                controlInfo[name] ?: [
+                                    label: name,
+                                    role: control.category ?: 'Contrôle de sécurité',
+                                    icon: '🔎'
+                                ]
 
-                    // ------------------------------------------------
-                    // REPORT EVIDENCE
-                    // ------------------------------------------------
+                            def gateLabel =
+                                blocking
+                                    ? 'GATE BLOQUANT'
+                                    : 'GATE NON BLOQUANT'
 
-                    message += """
 
-━━━━━━━━━━━━━━━━━━━━
+                            message += """
+${info.icon} *${info.label}*
+_Rôle : ${info.role}_
 
-:page_facing_up: *REPORTS*
+${statusEmoji(status)} *${statusLabel(status)} — ${gateLabel}*
 
-• `reports/status/`
-• `reports/raw/`
-• `reports/security/`
+${interpretation(
+    control,
+    status,
+    blocking,
+    rawMessage
+)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
+                        }
 
-                    // ------------------------------------------------
-                    // JENKINS BUILD LINK
-                    // ------------------------------------------------
 
-                    message += """
+                        // ====================================================
+                        // FINAL DECISION
+                        // ====================================================
 
-━━━━━━━━━━━━━━━━━━━━
+                        message += """
+🚦 *DÉCISION DU PIPELINE*
 
-:link: *Jenkins Build*
+${decisionTitle}
+
+${decisionMessage}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *PREUVES DE SÉCURITÉ*
+
+Rapports archivés :
+
+• reports/status/
+• reports/raw/
+• reports/security/
+
+📄 Synthèse centralisée :
+reports/status/pipeline-summary.json
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 *JENKINS BUILD*
 
 ${env.BUILD_URL}
 
-:robot_face: *Generated automatically by DevsecopsAI*
+🤖 Généré automatiquement par *DevsecopsAI*
 """
 
-                    // ------------------------------------------------
-                    // SEND SLACK MESSAGE
-                    // ------------------------------------------------
 
-                    slackSend(
-                        channel: '#devsecops-alerts',
-                        message: message
-                    )
+                        // ====================================================
+                        // SLACK COLOR
+                        // ====================================================
 
-                    echo 'Slack DevSecOps report sent successfully.'
+                        def slackColor
 
-                } catch (Exception e) {
+                        if (pipelineApproved) {
 
-                    echo "WARNING: Slack notification failed: ${e}"
+                            slackColor = 'good'
+
+                        } else if (blockingFailures > 0) {
+
+                            slackColor = 'danger'
+
+                        } else {
+
+                            slackColor = 'warning'
+                        }
+
+
+                        // ====================================================
+                        // SEND SLACK
+                        // ====================================================
+
+                        slackSend(
+                            channel: 'devsecops-alerts',
+                            color: slackColor,
+                            message: message
+                        )
+
+                        echo '=== SLACK REPORT SENT SUCCESSFULLY ==='
+
+                    } catch (Exception e) {
+
+                        echo "Slack notification failed: ${e.getMessage()}"
+
+                        currentBuild.result =
+                            currentBuild.result ?: 'UNSTABLE'
+                    }
                 }
             }
+
+            echo '=== PIPELINE EXECUTION FINISHED ==='
         }
-
-        // ============================================================
-        // PIPELINE FINISHED
-        // ============================================================
-
-        echo '=== PIPELINE EXECUTION FINISHED ==='
     }
-
-}
 }
