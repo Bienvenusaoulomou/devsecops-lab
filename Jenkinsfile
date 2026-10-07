@@ -667,7 +667,7 @@ pipeline {
         }
     }
 
-   post {
+post {
 
     always {
 
@@ -805,13 +805,13 @@ ${resultEmoji} *DEVSECOPS PIPELINE — BUILD #${env.BUILD_NUMBER}*
 *Project:* `${env.JOB_NAME}`
 *Branch:* `${env.BRANCH_NAME ?: 'main'}`
 *Commit:* `${env.GIT_COMMIT ?: 'N/A'}`
-*Jenkins result:* *${buildResult}*
+*Result:* *${buildResult}*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━
 
-*SECURITY OVERVIEW*
+*SECURITY SUMMARY*
 
-:shield: *Security Control Score:* ${score}%
+:shield: *Control Score:* ${score}%
 :bar_chart: *Evaluation Coverage:* ${coverage}%
 
 :white_check_mark: *PASS:* ${passed}
@@ -821,13 +821,13 @@ ${resultEmoji} *DEVSECOPS PIPELINE — BUILD #${env.BUILD_NUMBER}*
 
 *Controls evaluated:* ${total}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━
 
 *SECURITY CONTROLS*
 """
 
                     // ------------------------------------------------
-                    // DYNAMIC SECURITY CONTROL DETAILS
+                    // DYNAMIC SECURITY CONTROLS
                     // ------------------------------------------------
 
                     def results =
@@ -839,22 +839,12 @@ ${resultEmoji} *DEVSECOPS PIPELINE — BUILD #${env.BUILD_NUMBER}*
                             control.control ?:
                             control.name ?:
                             control.id ?:
-                            'Unknown control'
-
-                        def category =
-                            control.category ?:
-                            control.type ?:
-                            'Security'
+                            'Unknown'
 
                         def status =
                             (
                                 control.status ?: 'UNKNOWN'
                             ).toString().toUpperCase()
-
-                        def messageText =
-                            control.message ?:
-                            control.description ?:
-                            'No additional information.'
 
                         def isBlocking =
                             control.blocking == true
@@ -892,16 +882,13 @@ ${resultEmoji} *DEVSECOPS PIPELINE — BUILD #${env.BUILD_NUMBER}*
                                     ':grey_question:'
                         }
 
-                        def blockingLabel =
+                        def gateLabel =
                             isBlocking
-                                ? ' — *BLOCKING*'
+                                ? ' — *GATE*'
                                 : ''
 
-                        message += """
-${statusEmoji} *${name}* — ${status}${blockingLabel}
-   • Category: ${category}
-   • ${messageText}
-"""
+                        message +=
+                            "${statusEmoji} *${name}* — ${status}${gateLabel}\n"
                     }
 
                     // ------------------------------------------------
@@ -922,10 +909,9 @@ ${statusEmoji} *${name}* — ${status}${blockingLabel}
 
                         message += """
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━
 
 :no_entry: *BLOCKING FAILURES*
-
 """
 
                         blockingControls.each { control ->
@@ -934,17 +920,15 @@ ${statusEmoji} *${name}* — ${status}${blockingLabel}
                                 control.control ?:
                                 control.name ?:
                                 control.id ?:
-                                'Unknown control'
+                                'Unknown'
 
                             def reason =
                                 control.message ?:
                                 control.description ?:
                                 'No reason provided.'
 
-                            message += """
-• *${name}*
-  ${reason}
-"""
+                            message +=
+                                "• *${name}*: ${reason}\n"
                         }
                     }
 
@@ -954,16 +938,13 @@ ${statusEmoji} *${name}* — ${status}${blockingLabel}
 
                     message += """
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━
 
-:page_facing_up: *REPORT EVIDENCE*
-
-Security reports archived by Jenkins:
+:page_facing_up: *REPORTS*
 
 • `reports/status/`
 • `reports/raw/`
 • `reports/security/`
-• `reports/status/pipeline-summary.json`
 """
 
                     // ------------------------------------------------
@@ -972,7 +953,7 @@ Security reports archived by Jenkins:
 
                     message += """
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━
 
 :link: *Jenkins Build*
 
@@ -995,7 +976,6 @@ ${env.BUILD_URL}
                 } catch (Exception e) {
 
                     echo "WARNING: Slack notification failed: ${e}"
-
                 }
             }
         }
@@ -1006,5 +986,4 @@ ${env.BUILD_URL}
 
         echo '=== PIPELINE EXECUTION FINISHED ==='
     }
-}
 }
