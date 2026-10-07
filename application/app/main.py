@@ -88,3 +88,11 @@ def create_patient(patient: Patient):
     patients[patient_id] = new_patient
 
     return new_patient
+
+
+# TEST NEGATIF SONARQUBE - COVERAGE
+# Ce code est volontairement non couvert par les tests.
+@app.get("/coverage-negative-test")
+def coverage_negative_test():
+    result = "this code is intentionally not tested"
+    return {"result": result}
