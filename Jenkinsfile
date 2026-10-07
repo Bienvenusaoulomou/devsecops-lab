@@ -1221,86 +1221,59 @@ Total              : ${total}
                                     ? 'GATE BLOQUANT'
                                     : 'GATE NON BLOQUANT'
 
-
-                            // =================================================
-                            // DYNAMIC METRICS
-                            // =================================================
-
                             def metricsText = ''
 
                             switch (name) {
 
                                 case 'Application_Tests':
-
                                     metricsText =
-                                        "→ ${metrics.passed ?: 0}/${metrics.tests ?: 0} tests" +
+                                        "${metrics.passed ?: 0}/${metrics.tests ?: 0} tests" +
                                         " · Coverage ${metrics.coverage_percent ?: 0}%" +
                                         " · ${metrics.lines_covered ?: 0}/${metrics.lines_valid ?: 0} lignes" +
                                         " · ${metrics.warnings ?: 0} warning(s)"
-
                                     break
-
 
                                 case 'SAST_Semgrep':
-
                                     metricsText =
-                                        "→ ${metrics.findings ?: 0} findings" +
+                                        "${metrics.findings ?: 0} findings" +
                                         " · Error ${metrics.error ?: 0}" +
                                         " · Warning ${metrics.warning ?: 0}"
-
                                     break
 
-
                                 case 'SAST_Bandit':
-
                                     metricsText =
-                                        "→ ${metrics.findings ?: 0} findings" +
+                                        "${metrics.findings ?: 0} findings" +
                                         " · High ${metrics.high ?: 0}" +
                                         " · Medium ${metrics.medium ?: 0}" +
                                         " · Low ${metrics.low ?: 0}"
-
                                     break
-
 
                                 case 'SAST_SonarQube':
-
                                     metricsText =
-                                        "→ Quality Gate : ${metrics.quality_gate ?: 'N/A'}"
-
+                                        "Quality Gate : ${metrics.quality_gate ?: 'N/A'}"
                                     break
-
 
                                 case 'SCA_Pip_Audit':
-
                                     metricsText =
-                                        "→ ${metrics.dependencies ?: 0} dépendances" +
+                                        "${metrics.dependencies ?: 0} dépendances" +
                                         " · ${metrics.vulnerable_dependencies ?: 0} vulnérable(s)" +
                                         " · ${metrics.vulnerabilities ?: 0} CVE"
-
                                     break
 
-
                                 case 'SCA_OWASP_Dependency_Check':
-
                                     metricsText =
-                                        "→ ${metrics.artifacts ?: 0} artifact(s)" +
+                                        "${metrics.artifacts ?: 0} artifact(s)" +
                                         " · ${metrics.vulnerabilities ?: 0} vulnérabilité(s)" +
                                         " · Critical ${metrics.critical ?: 0}" +
                                         " · High ${metrics.high ?: 0}"
-
                                     break
-
 
                                 case 'Gitleaks':
-
                                     metricsText =
-                                        "→ ${metrics.secrets ?: 0} secret(s) détecté(s)"
-
+                                        "${metrics.secrets ?: 0} secret(s) détecté(s)"
                                     break
 
-
                                 case 'Docker_Build':
-
                                     def image =
                                         metrics.image ?: 'N/A'
 
@@ -1308,60 +1281,39 @@ Total              : ${total}
                                         metrics.tag ?: env.BUILD_NUMBER
 
                                     metricsText =
-                                        "→ Image : ${image}:${tag}"
-
+                                        "Image ${image}:${tag}"
                                     break
-
 
                                 case 'Trivy':
-
                                     metricsText =
-                                        "→ Critical ${metrics.critical ?: 0}" +
+                                        "Critical ${metrics.critical ?: 0}" +
                                         " · High ${metrics.high ?: 0}" +
                                         " · Medium ${metrics.medium ?: 0}" +
                                         " · Low ${metrics.low ?: 0}"
-
                                     break
-
 
                                 case 'Application_Start':
-
                                     metricsText =
-                                        "→ Health check : ${metrics.health_check ?: 'N/A'}"
-
+                                        "Health check : ${metrics.health_check ?: 'N/A'}"
                                     break
 
-
                                 case 'DAST_OWASP_ZAP':
-
                                     metricsText =
-                                        "→ ${metrics.alerts ?: 0} alert(s)" +
+                                        "${metrics.alerts ?: 0} alert(s)" +
                                         " · High ${metrics.high ?: 0}" +
                                         " · Medium ${metrics.medium ?: 0}" +
                                         " · Low ${metrics.low ?: 0}"
-
                                     break
 
-
                                 default:
-
                                     metricsText =
-                                        "→ Contrôle évalué."
-
+                                        "Contrôle évalué."
                                     break
                             }
 
-
-                            message += """
-${info.icon} *${info.label}*
-_Rôle : ${info.role}_
-
-${statusEmoji(status)} *${statusLabel(status)} — ${gateLabel}*
-
-${metricsText}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-"""
+                            message +=
+                                "${info.icon} *${info.label}* — _${info.role}_\n" +
+                                "${statusEmoji(status)} *${statusLabel(status)} · ${gateLabel}* · ${metricsText}\n\n"
                         }
 
 
