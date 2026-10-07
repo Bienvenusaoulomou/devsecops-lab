@@ -1261,8 +1261,8 @@ ${env.BUILD_URL}
                     currentBuild.result = 'UNSTABLE'
                 }
             }
-
-            echo '=== PIPELINE EXECUTION FINISHED ==='
+                 echo '=== PIPELINE EXECUTION FINISHED ==='
         }
     }
+}
 }
