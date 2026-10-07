@@ -852,7 +852,9 @@ pipeline {
 
             script {
 
-                echo '=== SENDING DEVSECOPS SLACK REPORT ==='
+                retry(count: 2, conditions: [nonresumable()]) {
+
+                    echo '=== SENDING DEVSECOPS SLACK REPORT ==='
 
                 if (!fileExists('reports/status/pipeline-summary.json')) {
 
@@ -1312,6 +1314,7 @@ ${env.BUILD_URL}
                         currentBuild.result =
                             currentBuild.result ?: 'UNSTABLE'
                     }
+                }
                 }
             }
 
