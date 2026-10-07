@@ -866,8 +866,12 @@ pipeline {
                         // READ CENTRALIZED SUMMARY
                         // ====================================================
 
-                        def summary = readJSON(
+                        def summaryText = readFile(
                             file: 'reports/status/pipeline-summary.json'
+                        )
+
+                        def summary = new groovy.json.JsonSlurperClassic().parseText(
+                            summaryText
                         )
 
 
