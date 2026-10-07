@@ -807,589 +807,458 @@ pipeline {
 
     post {
 
-        always {
+    always {
 
-            // ========================================================
-            // GENERATE PIPELINE SECURITY SUMMARY
-            // ========================================================
+        script {
 
+            // ============================================================
+            // 1. GENERATION DU RESUME CENTRALISE
+            // ============================================================
             echo '=== GENERATING PIPELINE SECURITY SUMMARY ==='
 
             sh '''
                 python3 scripts/generate_pipeline_summary.py
             '''
 
-
-            // ========================================================
-            // ARCHIVE SECURITY SUMMARY
-            // ========================================================
+            // ============================================================
+            // 2. ARCHIVAGE DU RESUME
+            // ============================================================
+            echo '=== ARCHIVING SECURITY SUMMARY ==='
 
             archiveArtifacts(
-                artifacts: 'reports/status/*.json',
+                artifacts: 'reports/status/**',
                 allowEmptyArchive: true,
                 fingerprint: true
             )
 
-
-            // ========================================================
-            // CLEANUP APPLICATION CONTAINER
-            // ========================================================
-
+            // ============================================================
+            // 3. CLEANUP APPLICATION CONTAINER
+            // ============================================================
             echo '=== CLEANUP ==='
 
             sh '''
-                echo "===== REMOVING APPLICATION CONTAINER ====="
-
                 docker rm -f "$APP_CONTAINER" 2>/dev/null || true
-
-                echo "===== CLEANUP COMPLETED ====="
             '''
 
+            echo '=== CLEANUP COMPLETED ==='
 
-            // ========================================================
-            // SLACK DEVSECOPS REPORT
-            // ========================================================
+            // ============================================================
+            // 4. SLACK SECURITY REPORT
+            // ============================================================
+            echo '=== SENDING DEVSECOPS SLACK REPORT ==='
 
-            script {
+            try {
 
                 retry(count: 2, conditions: [nonresumable()]) {
 
-                    echo '=== SENDING DEVSECOPS SLACK REPORT ==='
+                    script {
 
-                if (!fileExists('reports/status/pipeline-summary.json')) {
+                        if (!fileExists('reports/status/pipeline-summary.json')) {
 
-                    echo 'Slack notification skipped: pipeline summary not found.'
+                            echo 'Security summary not found. Slack notification skipped.'
 
-                } else {
+                        } else {
 
-                    try {
+                            def summaryText = readFile(
+                                'reports/status/pipeline-summary.json'
+                            )
 
-                        // ====================================================
-                        // READ CENTRALIZED SUMMARY
-                        // ====================================================
+                            def summary =
+                                new groovy.json.JsonSlurperClassic()
+                                    .parseText(summaryText)
 
-                        def summaryText = readFile(
-                            file: 'reports/status/pipeline-summary.json'
-                        )
+                            // ====================================================
+                            // CONTROL INFORMATION
+                            // ====================================================
+                            def controlInfo = [
 
-                        def summary = new groovy.json.JsonSlurperClassic().parseText(
-                            summaryText
-                        )
+                                'Application_Tests': [
+                                    label: 'Application Tests',
+                                    role: 'Validation fonctionnelle',
+                                    icon: '🧪'
+                                ],
 
+                                'SAST_Semgrep': [
+                                    label: 'Semgrep',
+                                    role: 'Analyse statique — SAST',
+                                    icon: '🔍'
+                                ],
 
-                        // ====================================================
-                        // CONTROL INFORMATION
-                        // ====================================================
+                                'SAST_Bandit': [
+                                    label: 'Bandit',
+                                    role: 'Analyse de sécurité Python — SAST',
+                                    icon: '🐍'
+                                ],
 
-                        def controlInfo = [
+                                'SAST_SonarQube': [
+                                    label: 'SonarQube',
+                                    role: 'Analyse statique et Quality Gate — SAST',
+                                    icon: '📊'
+                                ],
 
-                            'Application_Tests': [
-                                label: 'APPLICATION TESTS',
-                                role: 'Validation fonctionnelle',
-                                icon: '🧪'
-                            ],
+                                'SCA_Pip_Audit': [
+                                    label: 'pip-audit',
+                                    role: 'Analyse des dépendances Python — SCA',
+                                    icon: '📦'
+                                ],
 
-                            'SAST_Semgrep': [
-                                label: 'SEMGREP',
-                                role: 'Analyse statique — SAST',
-                                icon: '🔍'
-                            ],
+                                'SCA_OWASP_Dependency_Check': [
+                                    label: 'Dependency-Check',
+                                    role: 'Analyse des dépendances Java — SCA',
+                                    icon: '📦'
+                                ],
 
-                            'SAST_Bandit': [
-                                label: 'BANDIT',
-                                role: 'Analyse de sécurité Python — SAST',
-                                icon: '🐍'
-                            ],
+                                'Gitleaks': [
+                                    label: 'Gitleaks',
+                                    role: 'Détection de secrets',
+                                    icon: '🔐'
+                                ],
 
-                            'SAST_SonarQube': [
-                                label: 'SONARQUBE',
-                                role: 'Analyse statique et Quality Gate — SAST',
-                                icon: '📊'
-                            ],
+                                'Docker_Build': [
+                                    label: 'Docker Build',
+                                    role: 'Construction de l’image conteneur',
+                                    icon: '🐳'
+                                ],
 
-                            'SCA_Pip_Audit': [
-                                label: 'PIP-AUDIT',
-                                role: 'Analyse des dépendances Python — SCA',
-                                icon: '📦'
-                            ],
+                                'Trivy': [
+                                    label: 'Trivy',
+                                    role: 'Sécurité de l’image conteneur',
+                                    icon: '🛡️'
+                                ],
 
-                            'SCA_OWASP_Dependency_Check': [
-                                label: 'OWASP DEPENDENCY-CHECK',
-                                role: 'Analyse des dépendances Java — SCA',
-                                icon: '📦'
-                            ],
+                                'Application_Start': [
+                                    label: 'Application Start',
+                                    role: 'Démarrage et validation runtime',
+                                    icon: '🚀'
+                                ],
 
-                            'Gitleaks': [
-                                label: 'GITLEAKS',
-                                role: 'Détection de secrets',
-                                icon: '🔐'
-                            ],
-
-                            'Docker_Build': [
-                                label: 'DOCKER BUILD',
-                                role: 'Construction de l’image conteneur',
-                                icon: '🐳'
-                            ],
-
-                            'Trivy': [
-                                label: 'TRIVY',
-                                role: 'Sécurité de l’image conteneur',
-                                icon: '🛡️'
-                            ],
-
-                            'Application_Start': [
-                                label: 'APPLICATION START',
-                                role: 'Démarrage et validation runtime',
-                                icon: '🚀'
-                            ],
-
-                            'DAST_OWASP_ZAP': [
-                                label: 'OWASP ZAP',
-                                role: 'Analyse dynamique — DAST',
-                                icon: '🌐'
+                                'DAST_OWASP_ZAP': [
+                                    label: 'OWASP ZAP',
+                                    role: 'Analyse dynamique — DAST',
+                                    icon: '🌐'
+                                ]
                             ]
-                        ]
 
+                            // ====================================================
+                            // STATUS HELPERS
+                            // ====================================================
+                            def statusEmoji = { status ->
+                                switch (status) {
+                                    case 'PASS':
+                                        return '🟢'
+                                    case 'FAIL':
+                                        return '🔴'
+                                    case 'PENDING':
+                                        return '⏳'
+                                    default:
+                                        return '⚪'
+                                }
+                            }
 
-                        // ====================================================
-                        // STATUS HELPERS
-                        // ====================================================
+                            def statusLabel = { status ->
+                                switch (status) {
+                                    case 'PASS':
+                                        return 'PASS'
+                                    case 'FAIL':
+                                        return 'FAIL'
+                                    case 'PENDING':
+                                        return 'PENDING'
+                                    default:
+                                        return status ?: 'UNKNOWN'
+                                }
+                            }
 
-                        def statusEmoji = { status ->
+                            // ====================================================
+                            // GLOBAL PIPELINE DATA
+                            // ====================================================
+                            def result =
+                                currentBuild.currentResult ?: 'SUCCESS'
 
-                            switch (status?.toString()?.toUpperCase()) {
+                            def total =
+                                summary.total ?: 0
 
-                                case 'PASS':
-                                    return '✅'
+                            def passed =
+                                summary.pass ?: 0
 
-                                case 'FAIL':
-                                    return '❌'
+                            def failed =
+                                summary.fail ?: 0
 
-                                case 'PENDING':
-                                    return '⏳'
+                            def pending =
+                                summary.pending ?: 0
 
-                                case 'WARNING':
-                                    return '⚠️'
+                            def blockingFailures =
+                                summary.blocking_failures ?: 0
+
+                            def score =
+                                summary.control_score ?: 0
+
+                            def coverage =
+                                summary.evaluation_coverage ?: 0
+
+                            // ====================================================
+                            // PIPELINE DECISION
+                            // ====================================================
+                            def pipelineApproved = (
+                                result == 'SUCCESS' &&
+                                blockingFailures == 0 &&
+                                failed == 0 &&
+                                pending == 0
+                            )
+
+                            def decisionTitle
+                            def decisionMessage
+
+                            if (pipelineApproved) {
+
+                                decisionTitle =
+                                    '🟢 PIPELINE APPROUVÉ'
+
+                                decisionMessage =
+                                    'Tous les contrôles de sécurité sont passés. Aucun gate bloquant en échec.'
+
+                            } else {
+
+                                decisionTitle =
+                                    '🔴 PIPELINE BLOQUÉ'
+
+                                decisionMessage =
+                                    'Au moins un contrôle bloquant a échoué ou reste en attente. Le pipeline ne peut pas être considéré comme sécurisé.'
+                            }
+
+                            // ====================================================
+                            // BUILD STATUS
+                            // ====================================================
+                            def buildEmoji
+
+                            switch (result) {
+                                case 'SUCCESS':
+                                    buildEmoji = '🟢'
+                                    break
+
+                                case 'FAILURE':
+                                    buildEmoji = '🔴'
+                                    break
+
+                                case 'UNSTABLE':
+                                    buildEmoji = '🟠'
+                                    break
 
                                 default:
-                                    return '❓'
+                                    buildEmoji = '⚪'
                             }
-                        }
 
-
-                        def statusLabel = { status ->
-
-                            switch (status?.toString()?.toUpperCase()) {
-
-                                case 'PASS':
-                                    return 'RÉUSSI'
-
-                                case 'FAIL':
-                                    return 'ÉCHEC'
-
-                                case 'PENDING':
-                                    return 'EN ATTENTE'
-
-                                case 'WARNING':
-                                    return 'AVERTISSEMENT'
-
-                                default:
-                                    return 'INCONNU'
-                            }
-                        }
-
-
-                        // ====================================================
-                        // DYNAMIC INTERPRETATION
-                        // ====================================================
-
-                        def interpretation = {
-                            control,
-                            status,
-                            blocking,
-                            rawMessage ->
-
-                            def messageText =
-                                rawMessage ?:
-                                'Aucun détail supplémentaire disponible.'
-
-                            switch (status?.toString()?.toUpperCase()) {
-
-                                case 'PASS':
-
-                                    return "➡️ ${messageText}"
-
-                                case 'FAIL':
-
-                                    if (blocking) {
-
-                                        return "➡️ ${messageText} Le contrôle est bloquant : le pipeline est arrêté."
-
-                                    } else {
-
-                                        return "➡️ ${messageText} Le contrôle n'est pas bloquant."
-                                    }
-
-                                case 'WARNING':
-
-                                    return "➡️ ${messageText} Une attention particulière est requise."
-
-                                case 'PENDING':
-
-                                    return "➡️ ${messageText} Le contrôle n'a pas pu être évalué complètement."
-
-                                default:
-
-                                    return "➡️ ${messageText}"
-                            }
-                        }
-
-
-                        // ====================================================
-                        // GLOBAL PIPELINE DATA
-                        // ====================================================
-
-                        def result =
-                            currentBuild.currentResult ?: 'UNKNOWN'
-
-                        def passed =
-                            summary.pass ?: 0
-
-                        def failed =
-                            summary.fail ?: 0
-
-                        def pending =
-                            summary.pending ?: 0
-
-                        def blockingFailures =
-                            summary.blocking_failures ?: 0
-
-                        def total =
-                            summary.total ?: 0
-
-                        def score =
-                            summary.control_score ?: 0
-
-                        def coverage =
-                            summary.evaluation_coverage ?: 0
-
-
-                        // ====================================================
-                        // PIPELINE DECISION
-                        // ====================================================
-
-                        def pipelineApproved = (
-                            result == 'SUCCESS' &&
-                            blockingFailures == 0 &&
-                            failed == 0 &&
-                            pending == 0
-                        )
-
-
-                        def decisionTitle
-                        def decisionMessage
-
-
-                        if (pipelineApproved) {
-
-                            decisionTitle =
-                                '✅ PIPELINE APPROUVÉ'
-
-                            decisionMessage =
-                                'Tous les contrôles obligatoires ont été évalués avec succès. Aucun échec bloquant détecté.'
-
-                        } else if (blockingFailures > 0) {
-
-                            decisionTitle =
-                                '🚫 PIPELINE BLOQUÉ'
-
-                            decisionMessage =
-                                "${blockingFailures} échec(s) bloquant(s) détecté(s). Le pipeline ne peut pas poursuivre normalement."
-
-                        } else if (failed > 0) {
-
-                            decisionTitle =
-                                '❌ PIPELINE EN ÉCHEC'
-
-                            decisionMessage =
-                                "${failed} contrôle(s) en échec. La validation globale du pipeline est négative."
-
-                        } else if (pending > 0) {
-
-                            decisionTitle =
-                                '⚠️ PIPELINE NON VALIDÉ'
-
-                            decisionMessage =
-                                "${pending} contrôle(s) n'ont pas pu être évalués complètement. La couverture de sécurité est incomplète."
-
-                        } else {
-
-                            decisionTitle =
-                                '⚠️ PIPELINE À VÉRIFIER'
-
-                            decisionMessage =
-                                'L’état global du pipeline nécessite une vérification.'
-                        }
-
-
-                        // ====================================================
-                        // BUILD RESULT
-                        // ====================================================
-
-                        def buildEmoji
-
-                        if (result == 'SUCCESS') {
-
-                            buildEmoji = '✅'
-
-                        } else if (result == 'FAILURE') {
-
-                            buildEmoji = '❌'
-
-                        } else {
-
-                            buildEmoji = '⚠️'
-                        }
-
-
-                        // ====================================================
-                        // INITIAL SLACK MESSAGE
-                        // ====================================================
-
-                        def message = """
+                            // ====================================================
+                            // SLACK MESSAGE — COMPACT / SINGLE MESSAGE
+                            // ====================================================
+                            def message = """
 🤖 *PIPELINE DEVSECOPS — BUILD #${env.BUILD_NUMBER}*
 
 📋 *EXÉCUTION*
-
-Projet        : ${env.JOB_NAME}
-Branche       : ${env.GIT_BRANCH ?: 'main'}
-Commit        : ${(env.GIT_COMMIT ?: 'N/A').take(8)}
-Résultat      : ${buildEmoji} ${result}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+Projet : ${env.JOB_NAME} | Branche : ${env.GIT_BRANCH ?: 'main'} | Commit : ${(env.GIT_COMMIT ?: 'N/A').take(8)}
+Résultat : ${buildEmoji} ${result}
 
 🛡️ *SCORECARD SÉCURITÉ*
-
-Score des contrôles     : *${score}%*
-Couverture d'évaluation : *${coverage}%*
-
-Total              : ${total}
-✅ Réussis          : ${passed}
-❌ Échecs           : ${failed}
-⏳ En attente       : ${pending}
-🚫 Échecs bloquants : ${blockingFailures}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+Score : *${score}%* | Couverture : *${coverage}%*
+Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : ${pending} | 🚫 Bloquants : ${blockingFailures}
 
 🔎 *CONTRÔLES DE SÉCURITÉ*
 """
 
+                            // ====================================================
+                            // DYNAMIC CONTROL DETAILS
+                            // ====================================================
+                            summary.results.each { control ->
 
-                        // ====================================================
-                        // CONTROL DETAILS
-                        // ====================================================
+                                def name = control.control
+                                def status = control.status ?: 'UNKNOWN'
+                                def metrics = control.metrics ?: [:]
 
-                        def results =
-                            summary.results ?: []
-
-
-                        results.each { control ->
-
-                            def name =
-                                control.control ?: 'Unknown'
-
-                            def status =
-                                (control.status ?: 'PENDING')
-                                .toString()
-                                .toUpperCase()
-
-                            def blocking =
-                                control.blocking == true
-
-                            def metrics =
-                                control.metrics ?: [:]
-
-                            def info =
-                                controlInfo[name] ?: [
+                                def info = controlInfo[name] ?: [
                                     label: name,
-                                    role: control.category ?: 'Contrôle de sécurité',
-                                    icon: '🔎'
+                                    role: 'Contrôle de sécurité',
+                                    icon: '🔹'
                                 ]
 
-                            def gateLabel =
-                                blocking
-                                    ? 'GATE BLOQUANT'
-                                    : 'GATE NON BLOQUANT'
+                                // Tous les contrôles sont des gates bloquants
+                                def gateLabel = 'GATE BLOQUANT'
 
-                            def metricsText = ''
+                                def metricsText = ''
 
-                            switch (name) {
+                                switch (name) {
 
-                                case 'Application_Tests':
-                                    metricsText =
-                                        "${metrics.passed ?: 0}/${metrics.tests ?: 0} tests" +
-                                        " · Coverage ${metrics.coverage_percent ?: 0}%" +
-                                        " · ${metrics.lines_covered ?: 0}/${metrics.lines_valid ?: 0} lignes" +
-                                        " · ${metrics.warnings ?: 0} warning(s)"
-                                    break
+                                    case 'Application_Tests':
 
-                                case 'SAST_Semgrep':
-                                    metricsText =
-                                        "${metrics.findings ?: 0} findings" +
-                                        " · Error ${metrics.error ?: 0}" +
-                                        " · Warning ${metrics.warning ?: 0}"
-                                    break
+                                        metricsText =
+                                            "${metrics.passed ?: 0}/${metrics.tests ?: 0} tests · " +
+                                            "Coverage ${metrics.coverage_percent ?: 0}% · " +
+                                            "${metrics.lines_covered ?: 0}/${metrics.lines_valid ?: 0} lignes · " +
+                                            "${metrics.warnings ?: 0} warning(s)"
 
-                                case 'SAST_Bandit':
-                                    metricsText =
-                                        "${metrics.findings ?: 0} findings" +
-                                        " · High ${metrics.high ?: 0}" +
-                                        " · Medium ${metrics.medium ?: 0}" +
-                                        " · Low ${metrics.low ?: 0}"
-                                    break
+                                        break
 
-                                case 'SAST_SonarQube':
-                                    metricsText =
-                                        "Quality Gate : ${metrics.quality_gate ?: 'N/A'}"
-                                    break
+                                    case 'SAST_Semgrep':
 
-                                case 'SCA_Pip_Audit':
-                                    metricsText =
-                                        "${metrics.dependencies ?: 0} dépendances" +
-                                        " · ${metrics.vulnerable_dependencies ?: 0} vulnérable(s)" +
-                                        " · ${metrics.vulnerabilities ?: 0} CVE"
-                                    break
+                                        metricsText =
+                                            "${metrics.findings ?: 0} findings · " +
+                                            "Error ${metrics.error ?: 0} · " +
+                                            "Warning ${metrics.warning ?: 0}"
 
-                                case 'SCA_OWASP_Dependency_Check':
-                                    metricsText =
-                                        "${metrics.artifacts ?: 0} artifact(s)" +
-                                        " · ${metrics.vulnerabilities ?: 0} vulnérabilité(s)" +
-                                        " · Critical ${metrics.critical ?: 0}" +
-                                        " · High ${metrics.high ?: 0}"
-                                    break
+                                        break
 
-                                case 'Gitleaks':
-                                    metricsText =
-                                        "${metrics.secrets ?: 0} secret(s) détecté(s)"
-                                    break
+                                    case 'SAST_Bandit':
 
-                                case 'Docker_Build':
-                                    def image =
-                                        metrics.image ?: 'N/A'
+                                        metricsText =
+                                            "${metrics.findings ?: 0} findings · " +
+                                            "High ${metrics.high ?: 0} · " +
+                                            "Medium ${metrics.medium ?: 0} · " +
+                                            "Low ${metrics.low ?: 0}"
 
-                                    def tag =
-                                        metrics.tag ?: env.BUILD_NUMBER
+                                        break
 
-                                    metricsText =
-                                        "Image ${image}:${tag}"
-                                    break
+                                    case 'SAST_SonarQube':
 
-                                case 'Trivy':
-                                    metricsText =
-                                        "Critical ${metrics.critical ?: 0}" +
-                                        " · High ${metrics.high ?: 0}" +
-                                        " · Medium ${metrics.medium ?: 0}" +
-                                        " · Low ${metrics.low ?: 0}"
-                                    break
+                                        metricsText =
+                                            "Quality Gate : ${metrics.quality_gate ?: 'UNKNOWN'}"
 
-                                case 'Application_Start':
-                                    metricsText =
-                                        "Health check : ${metrics.health_check ?: 'N/A'}"
-                                    break
+                                        break
 
-                                case 'DAST_OWASP_ZAP':
-                                    metricsText =
-                                        "${metrics.alerts ?: 0} alert(s)" +
-                                        " · High ${metrics.high ?: 0}" +
-                                        " · Medium ${metrics.medium ?: 0}" +
-                                        " · Low ${metrics.low ?: 0}"
-                                    break
+                                    case 'SCA_Pip_Audit':
 
-                                default:
-                                    metricsText =
-                                        "Contrôle évalué."
-                                    break
+                                        metricsText =
+                                            "${metrics.dependencies ?: 0} dépendances · " +
+                                            "${metrics.vulnerable_dependencies ?: 0} vulnérable(s) · " +
+                                            "${metrics.vulnerabilities ?: 0} CVE"
+
+                                        break
+
+                                    case 'SCA_OWASP_Dependency_Check':
+
+                                        metricsText =
+                                            "${metrics.artifacts ?: 0} artifact(s) · " +
+                                            "${metrics.vulnerabilities ?: 0} vulnérabilité(s) · " +
+                                            "Critical ${metrics.critical ?: 0} · " +
+                                            "High ${metrics.high ?: 0}"
+
+                                        break
+
+                                    case 'Gitleaks':
+
+                                        metricsText =
+                                            "${metrics.secrets ?: 0} secret(s) détecté(s)"
+
+                                        break
+
+                                    case 'Docker_Build':
+
+                                        def imageName =
+                                            metrics.image ?: env.APP_IMAGE
+
+                                        def imageTag =
+                                            metrics.tag ?: env.BUILD_NUMBER
+
+                                        metricsText =
+                                            "Image ${imageName}:${imageTag}"
+
+                                        break
+
+                                    case 'Trivy':
+
+                                        metricsText =
+                                            "Critical ${metrics.critical ?: 0} · " +
+                                            "High ${metrics.high ?: 0} · " +
+                                            "Medium ${metrics.medium ?: 0} · " +
+                                            "Low ${metrics.low ?: 0}"
+
+                                        break
+
+                                    case 'Application_Start':
+
+                                        metricsText =
+                                            "Health check : ${metrics.health_check ?: 'UNKNOWN'}"
+
+                                        break
+
+                                    case 'DAST_OWASP_ZAP':
+
+                                        metricsText =
+                                            "${metrics.alerts ?: 0} alert(s) · " +
+                                            "High ${metrics.high ?: 0} · " +
+                                            "Medium ${metrics.medium ?: 0} · " +
+                                            "Low ${metrics.low ?: 0}"
+
+                                        break
+
+                                    default:
+
+                                        metricsText =
+                                            'Métriques disponibles dans le rapport centralisé'
+                                }
+
+                                message +=
+                                    "${info.icon} *${info.label}* — _${info.role}_\n" +
+                                    "${statusEmoji(status)} *${statusLabel(status)} · ${gateLabel}* · ${metricsText}\n"
                             }
 
-                            message +=
-                                "${info.icon} *${info.label}* — _${info.role}_\n" +
-                                "${statusEmoji(status)} *${statusLabel(status)} · ${gateLabel}* · ${metricsText}\n\n"
-                        }
+                            // ====================================================
+                            // FINAL DECISION + EVIDENCE
+                            // ====================================================
+                            message += """
 
-
-                        // FINAL DECISION
-                        // ====================================================
-
-                        message += """
 🚦 *DÉCISION DU PIPELINE*
-
 ${decisionTitle}
-
 ${decisionMessage}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 📊 *PREUVES DE SÉCURITÉ*
-
-Rapports archivés :
-
-• reports/status/
-• reports/raw/
-• reports/security/
-
-📄 Synthèse centralisée :
-reports/status/pipeline-summary.json
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+Rapports : reports/status/ | reports/raw/ | reports/security/
+Synthèse : reports/status/pipeline-summary.json
 
 🔗 *JENKINS BUILD*
-
 ${env.BUILD_URL}
 
 🤖 Généré automatiquement par *DevsecopsAI*
 """
 
+                            // ====================================================
+                            // SLACK SEND
+                            // ====================================================
+                            def slackColor
 
-                        // ====================================================
-                        // SLACK COLOR
-                        // ====================================================
+                            switch (result) {
+                                case 'SUCCESS':
+                                    slackColor = 'good'
+                                    break
 
-                        def slackColor
+                                case 'FAILURE':
+                                    slackColor = 'danger'
+                                    break
 
-                        if (pipelineApproved) {
+                                case 'UNSTABLE':
+                                    slackColor = 'warning'
+                                    break
 
-                            slackColor = 'good'
+                                default:
+                                    slackColor = '#808080'
+                            }
 
-                        } else if (blockingFailures > 0) {
+                            slackSend(
+                                channel: 'devsecops-alerts',
+                                color: slackColor,
+                                message: message
+                            )
 
-                            slackColor = 'danger'
-
-                        } else {
-
-                            slackColor = 'warning'
+                            echo '=== SLACK REPORT SENT SUCCESSFULLY ==='
                         }
-
-
-                        // ====================================================
-                        // SEND SLACK
-                        // ====================================================
-
-                        slackSend(
-                            channel: 'devsecops-alerts',
-                            color: slackColor,
-                            message: message
-                        )
-
-                        echo '=== SLACK REPORT SENT SUCCESSFULLY ==='
-
-                    } catch (Exception e) {
-
-                        echo "Slack notification failed: ${e.getMessage()}"
-
-                        currentBuild.result =
-                            currentBuild.result ?: 'UNSTABLE'
                     }
                 }
+
+            } catch (Exception e) {
+
+                echo "Slack notification failed: ${e.message}"
+
+                if (!currentBuild.currentResult ||
+                    currentBuild.currentResult == 'SUCCESS') {
+
+                    currentBuild.result = 'UNSTABLE'
                 }
             }
 
