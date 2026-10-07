@@ -667,29 +667,343 @@ pipeline {
         }
     }
 
-    post {
-        always {
-            echo '=== GENERATING PIPELINE SECURITY SUMMARY ==='
+   post {
 
-            sh '''
-                python3 scripts/generate_pipeline_summary.py
-            '''
+    always {
 
-            archiveArtifacts artifacts: 'reports/status/*.json',
-                             allowEmptyArchive: true,
-                             fingerprint: true
+        // ============================================================
+        // GENERATE PIPELINE SECURITY SUMMARY
+        // ============================================================
 
-            echo '=== CLEANUP ==='
+        echo '=== GENERATING PIPELINE SECURITY SUMMARY ==='
 
-            sh '''
-                echo "===== REMOVING APPLICATION CONTAINER ====="
+        sh '''
+            python3 scripts/generate_pipeline_summary.py
+        '''
 
-                docker rm -f "$APP_CONTAINER" 2>/dev/null || true
+        // ============================================================
+        // ARCHIVE SECURITY REPORTS
+        // ============================================================
 
-                echo "===== CLEANUP COMPLETED ====="
-            '''
+        archiveArtifacts(
+            artifacts: 'reports/status/*.json',
+            allowEmptyArchive: true,
+            fingerprint: true
+        )
 
-            echo '=== PIPELINE EXECUTION FINISHED ==='
+        // ============================================================
+        // CLEANUP APPLICATION CONTAINER
+        // ============================================================
+
+        echo '=== CLEANUP ==='
+
+        sh '''
+            echo "===== REMOVING APPLICATION CONTAINER ====="
+
+            docker rm -f "$APP_CONTAINER" 2>/dev/null || true
+
+            echo "===== CLEANUP COMPLETED ====="
+        '''
+
+        // ============================================================
+        // SLACK DEVSECOPS REPORT
+        // ============================================================
+
+        script {
+
+            echo '=== SENDING DEVSECOPS SLACK REPORT ==='
+
+            if (!fileExists('reports/status/pipeline-summary.json')) {
+
+                echo 'Slack notification skipped: pipeline summary not found.'
+
+            } else {
+
+                try {
+
+                    // ------------------------------------------------
+                    // READ CENTRALIZED SECURITY SUMMARY
+                    // ------------------------------------------------
+
+                    def summaryText = readFile(
+                        file: 'reports/status/pipeline-summary.json'
+                    )
+
+                    def summary =
+                        new groovy.json.JsonSlurper().parseText(summaryText)
+
+                    // ------------------------------------------------
+                    // GLOBAL PIPELINE INFORMATION
+                    // ------------------------------------------------
+
+                    def buildResult =
+                        currentBuild.currentResult ?: 'UNKNOWN'
+
+                    def total =
+                        (summary.total ?: 0) as int
+
+                    def passed =
+                        (summary.pass ?: 0) as int
+
+                    def failed =
+                        (summary.fail ?: 0) as int
+
+                    def pending =
+                        (summary.pending ?: 0) as int
+
+                    def blocking =
+                        (summary.blocking_failures ?: 0) as int
+
+                    def score =
+                        summary.control_score != null
+                            ? summary.control_score.toString()
+                            : 'N/A'
+
+                    def coverage =
+                        summary.evaluation_coverage != null
+                            ? summary.evaluation_coverage.toString()
+                            : 'N/A'
+
+                    // ------------------------------------------------
+                    // PIPELINE RESULT
+                    // ------------------------------------------------
+
+                    def resultEmoji
+
+                    if (
+                        blocking > 0 ||
+                        buildResult == 'FAILURE'
+                    ) {
+
+                        resultEmoji = ':x:'
+
+                    } else if (
+                        failed > 0 ||
+                        buildResult == 'UNSTABLE'
+                    ) {
+
+                        resultEmoji = ':warning:'
+
+                    } else if (
+                        buildResult == 'SUCCESS'
+                    ) {
+
+                        resultEmoji = ':white_check_mark:'
+
+                    } else {
+
+                        resultEmoji = ':grey_question:'
+                    }
+
+                    // ------------------------------------------------
+                    // SLACK HEADER
+                    // ------------------------------------------------
+
+                    def message = """
+${resultEmoji} *DEVSECOPS PIPELINE — BUILD #${env.BUILD_NUMBER}*
+
+*Project:* `${env.JOB_NAME}`
+*Branch:* `${env.BRANCH_NAME ?: 'main'}`
+*Commit:* `${env.GIT_COMMIT ?: 'N/A'}`
+*Jenkins result:* *${buildResult}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+*SECURITY OVERVIEW*
+
+:shield: *Security Control Score:* ${score}%
+:bar_chart: *Evaluation Coverage:* ${coverage}%
+
+:white_check_mark: *PASS:* ${passed}
+:x: *FAIL:* ${failed}
+:hourglass_flowing_sand: *PENDING:* ${pending}
+:no_entry: *Blocking failures:* ${blocking}
+
+*Controls evaluated:* ${total}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+*SECURITY CONTROLS*
+"""
+
+                    // ------------------------------------------------
+                    // DYNAMIC SECURITY CONTROL DETAILS
+                    // ------------------------------------------------
+
+                    def results =
+                        summary.results ?: []
+
+                    results.each { control ->
+
+                        def name =
+                            control.control ?:
+                            control.name ?:
+                            control.id ?:
+                            'Unknown control'
+
+                        def category =
+                            control.category ?:
+                            control.type ?:
+                            'Security'
+
+                        def status =
+                            (
+                                control.status ?: 'UNKNOWN'
+                            ).toString().toUpperCase()
+
+                        def messageText =
+                            control.message ?:
+                            control.description ?:
+                            'No additional information.'
+
+                        def isBlocking =
+                            control.blocking == true
+
+                        def statusEmoji
+
+                        switch (status) {
+
+                            case 'PASS':
+
+                                statusEmoji =
+                                    ':white_check_mark:'
+
+                                break
+
+                            case 'FAIL':
+
+                                statusEmoji =
+                                    isBlocking
+                                        ? ':no_entry:'
+                                        : ':x:'
+
+                                break
+
+                            case 'PENDING':
+
+                                statusEmoji =
+                                    ':hourglass_flowing_sand:'
+
+                                break
+
+                            default:
+
+                                statusEmoji =
+                                    ':grey_question:'
+                        }
+
+                        def blockingLabel =
+                            isBlocking
+                                ? ' — *BLOCKING*'
+                                : ''
+
+                        message += """
+${statusEmoji} *${name}* — ${status}${blockingLabel}
+   • Category: ${category}
+   • ${messageText}
+"""
+                    }
+
+                    // ------------------------------------------------
+                    // BLOCKING FAILURES
+                    // ------------------------------------------------
+
+                    def blockingControls =
+                        results.findAll { control ->
+
+                            control.status
+                                ?.toString()
+                                ?.toUpperCase() == 'FAIL' &&
+
+                            control.blocking == true
+                        }
+
+                    if (blockingControls) {
+
+                        message += """
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+:no_entry: *BLOCKING FAILURES*
+
+"""
+
+                        blockingControls.each { control ->
+
+                            def name =
+                                control.control ?:
+                                control.name ?:
+                                control.id ?:
+                                'Unknown control'
+
+                            def reason =
+                                control.message ?:
+                                control.description ?:
+                                'No reason provided.'
+
+                            message += """
+• *${name}*
+  ${reason}
+"""
+                        }
+                    }
+
+                    // ------------------------------------------------
+                    // REPORT EVIDENCE
+                    // ------------------------------------------------
+
+                    message += """
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+:page_facing_up: *REPORT EVIDENCE*
+
+Security reports archived by Jenkins:
+
+• `reports/status/`
+• `reports/raw/`
+• `reports/security/`
+• `reports/status/pipeline-summary.json`
+"""
+
+                    // ------------------------------------------------
+                    // JENKINS BUILD LINK
+                    // ------------------------------------------------
+
+                    message += """
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+:link: *Jenkins Build*
+
+${env.BUILD_URL}
+
+:robot_face: *Generated automatically by DevsecopsAI*
+"""
+
+                    // ------------------------------------------------
+                    // SEND SLACK MESSAGE
+                    // ------------------------------------------------
+
+                    slackSend(
+                        channel: '#devsecops-alerts',
+                        message: message
+                    )
+
+                    echo 'Slack DevSecOps report sent successfully.'
+
+                } catch (Exception e) {
+
+                    echo "WARNING: Slack notification failed: ${e}"
+
+                }
+            }
         }
+
+        // ============================================================
+        // PIPELINE FINISHED
+        // ============================================================
+
+        echo '=== PIPELINE EXECUTION FINISHED ==='
     }
 }
