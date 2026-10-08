@@ -580,63 +580,79 @@ pipeline {
         // ============================================================
 
         stage('Container Security - Trivy') {
-            steps {
-                echo '=== CONTAINER SECURITY - TRIVY ==='
+    steps {
+        echo '=== CONTAINER SECURITY - TRIVY ==='
 
-                sh '''
-                    set -e
+        sh '''
+            set -u
 
-                    mkdir -p reports/raw/trivy
+            mkdir -p reports/raw/trivy
+            rm -f reports/raw/trivy/trivy.json
 
-                    rm -f reports/raw/trivy/trivy.json
+            echo "===== TRIVY VERSION ====="
+            trivy --version
 
-                    echo "===== TRIVY VERSION ====="
+            echo "===== TRIVY FULL VULNERABILITY REPORT ====="
 
-                    trivy --version
+            trivy image \
+                --scanners vuln \
+                --ignore-unfixed \
+                --format json \
+                --output reports/raw/trivy/trivy.json \
+                "$APP_IMAGE:$BUILD_NUMBER"
 
-                    echo "===== TRIVY FULL VULNERABILITY REPORT ====="
+            test -f reports/raw/trivy/trivy.json
 
-                    trivy image \
-                        --scanners vuln \
-                        --ignore-unfixed \
-                        --format json \
-                        --output reports/raw/trivy/trivy.json \
-                        "$APP_IMAGE:$BUILD_NUMBER"
+            echo "===== TRIVY SECURITY QUALITY GATE ====="
 
-                    test -f reports/raw/trivy/trivy.json
+            set +e
 
-                    echo "===== TRIVY SECURITY QUALITY GATE ====="
+            trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed \
+                --exit-code 1 \
+                "$APP_IMAGE:$BUILD_NUMBER"
 
-                    trivy image \
-                        --scanners vuln \
-                        --severity HIGH,CRITICAL \
-                        --ignore-unfixed \
-                        --exit-code 1 \
-                        "$APP_IMAGE:$BUILD_NUMBER"
+            TRIVY_EXIT=$?
 
-                    echo "===== TRIVY QUALITY GATE PASSED ====="
-                '''
+            set -e
 
-                sh '''
-                    python3 scripts/write_status.py \
-                        Trivy \
-                        Container_Security \
-                        PASS \
-                        "Trivy container scan completed and quality gate passed." \
-                        true
-                '''
-            }
+            if [ "$TRIVY_EXIT" -eq 0 ]; then
+                echo "===== TRIVY QUALITY GATE PASSED ====="
 
-            post {
-                always {
-                    archiveArtifacts(
-                        artifacts: 'reports/raw/trivy/trivy.json',
-                        allowEmptyArchive: true,
-                        fingerprint: true
-                    )
-                }
-            }
+                python3 scripts/write_status.py \
+                    Trivy \
+                    Container_Security \
+                    PASS \
+                    "Trivy container scan completed and no HIGH/CRITICAL unfixed vulnerabilities were found." \
+                    true
+
+            else
+                echo "===== TRIVY QUALITY GATE FAILED ====="
+
+                python3 scripts/write_status.py \
+                    Trivy \
+                    Container_Security \
+                    FAIL \
+                    "Trivy found HIGH/CRITICAL unfixed vulnerabilities in the container image." \
+                    true
+
+                exit "$TRIVY_EXIT"
+            fi
+        '''
+    }
+
+    post {
+        always {
+            archiveArtifacts(
+                artifacts: 'reports/raw/trivy/trivy.json',
+                allowEmptyArchive: true,
+                fingerprint: true
+            )
         }
+    }
+}
 
 
         // ============================================================
@@ -874,83 +890,102 @@ pipeline {
 
                                 'Application_Tests': [
                                     label: 'Application Tests',
+                                    role: 'Validation fonctionnelle',
                                     icon: '🧪'
                                 ],
 
                                 'SAST_Semgrep': [
                                     label: 'Semgrep',
+                                    role: 'Analyse statique — SAST',
                                     icon: '🔍'
                                 ],
 
                                 'SAST_Bandit': [
                                     label: 'Bandit',
+                                    role: 'Analyse de sécurité Python — SAST',
                                     icon: '🐍'
                                 ],
 
                                 'SAST_SonarQube': [
                                     label: 'SonarQube',
+                                    role: 'Analyse statique et Quality Gate — SAST',
                                     icon: '📊'
                                 ],
 
                                 'SCA_Pip_Audit': [
                                     label: 'pip-audit',
+                                    role: 'Analyse des dépendances Python — SCA',
                                     icon: '📦'
                                 ],
 
                                 'SCA_OWASP_Dependency_Check': [
                                     label: 'Dependency-Check',
+                                    role: 'Analyse des dépendances Java — SCA',
                                     icon: '📦'
                                 ],
 
                                 'Gitleaks': [
                                     label: 'Gitleaks',
+                                    role: 'Détection de secrets',
                                     icon: '🔐'
                                 ],
 
                                 'Docker_Build': [
                                     label: 'Docker Build',
+                                    role: 'Construction de l’image conteneur',
                                     icon: '🐳'
                                 ],
 
                                 'Trivy': [
                                     label: 'Trivy',
+                                    role: 'Sécurité de l’image conteneur',
                                     icon: '🛡️'
                                 ],
 
                                 'Application_Start': [
                                     label: 'Application Start',
+                                    role: 'Démarrage et validation runtime',
                                     icon: '🚀'
                                 ],
 
                                 'DAST_OWASP_ZAP': [
                                     label: 'OWASP ZAP',
+                                    role: 'Analyse dynamique — DAST',
                                     icon: '🌐'
                                 ]
                             ]
 
                             // ====================================================
-                            // STATUS
+                            // STATUS HELPERS
                             // ====================================================
                             def statusEmoji = { status ->
-
                                 switch (status) {
-
                                     case 'PASS':
                                         return '🟢'
-
                                     case 'FAIL':
                                         return '🔴'
-
                                     case 'PENDING':
                                         return '⏳'
-
                                     default:
                                         return '⚪'
                                 }
                             }
 
+                            def statusLabel = { status ->
+                                switch (status) {
+                                    case 'PASS':
+                                        return 'PASS'
+                                    case 'FAIL':
+                                        return 'FAIL'
+                                    case 'PENDING':
+                                        return 'PENDING'
+                                    default:
+                                        return status ?: 'UNKNOWN'
+                                }
+                            }
+
                             // ====================================================
-                            // GLOBAL DATA
+                            // GLOBAL PIPELINE DATA
                             // ====================================================
                             def result =
                                 currentBuild.currentResult ?: 'SUCCESS'
@@ -987,16 +1022,23 @@ pipeline {
                             )
 
                             def decisionTitle
+                            def decisionMessage
 
                             if (pipelineApproved) {
 
                                 decisionTitle =
                                     '🟢 PIPELINE APPROUVÉ'
 
+                                decisionMessage =
+                                    'Tous les contrôles de sécurité sont passés. Aucun contrôle bloquant en échec.'
+
                             } else {
 
                                 decisionTitle =
                                     '🔴 PIPELINE BLOQUÉ'
+
+                                decisionMessage =
+                                    'Au moins un contrôle de sécurité a échoué ou reste en attente. Le pipeline ne peut pas être considéré comme sécurisé.'
                             }
 
                             // ====================================================
@@ -1005,7 +1047,6 @@ pipeline {
                             def buildEmoji
 
                             switch (result) {
-
                                 case 'SUCCESS':
                                     buildEmoji = '🟢'
                                     break
@@ -1023,20 +1064,20 @@ pipeline {
                             }
 
                             // ====================================================
-                            // COMPACT SLACK MESSAGE
+                            // SLACK MESSAGE — COMPACT / SINGLE MESSAGE
                             // ====================================================
                             def message = """
-🤖 *DEVSECOPS — BUILD #${env.BUILD_NUMBER}*
+🤖 *PIPELINE DEVSECOPS — BUILD #${env.BUILD_NUMBER}*
 
 📋 *EXÉCUTION*
-${env.JOB_NAME} | ${env.GIT_BRANCH ?: 'main'} | ${(env.GIT_COMMIT ?: 'N/A').take(8)}
-Résultat : ${buildEmoji} *${result}*
+Projet : ${env.JOB_NAME} | Branche : ${env.GIT_BRANCH ?: 'main'} | Commit : ${(env.GIT_COMMIT ?: 'N/A').take(8)}
+Résultat : ${buildEmoji} ${result}
 
-🛡️ *SCORECARD*
-Score *${score}%* | Couverture *${coverage}%*
-${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending} PENDING | 🚫 ${blockingFailures} bloquant(s)
+🛡️ *SCORECARD SÉCURITÉ*
+Score : *${score}%* | Couverture : *${coverage}%*
+Total : ${total} | ✅ PASS : ${passed} | ❌ FAIL : ${failed} | ⏳ PENDING : ${pending} | 🚫 Bloquants : ${blockingFailures}
 
-🔎 *CONTRÔLES*
+🔎 *CONTRÔLES DE SÉCURITÉ*
 """
 
                             // ====================================================
@@ -1044,20 +1085,15 @@ ${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending}
                             // ====================================================
                             summary.results.each { control ->
 
-                                def name =
-                                    control.control
+                                def name = control.control
+                                def status = control.status ?: 'UNKNOWN'
+                                def metrics = control.metrics ?: [:]
 
-                                def status =
-                                    control.status ?: 'UNKNOWN'
-
-                                def metrics =
-                                    control.metrics ?: [:]
-
-                                def info =
-                                    controlInfo[name] ?: [
-                                        label: name,
-                                        icon: '🔹'
-                                    ]
+                                def info = controlInfo[name] ?: [
+                                    label: name,
+                                    role: 'Contrôle de sécurité',
+                                    icon: '🔹'
+                                ]
 
                                 def metricsText = ''
 
@@ -1068,6 +1104,7 @@ ${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending}
                                         metricsText =
                                             "${metrics.passed ?: 0}/${metrics.tests ?: 0} tests · " +
                                             "Coverage ${metrics.coverage_percent ?: 0}% · " +
+                                            "${metrics.lines_covered ?: 0}/${metrics.lines_valid ?: 0} lignes · " +
                                             "${metrics.warnings ?: 0} warning(s)"
 
                                         break
@@ -1076,8 +1113,8 @@ ${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending}
 
                                         metricsText =
                                             "${metrics.findings ?: 0} findings · " +
-                                            "E${metrics.error ?: 0} · " +
-                                            "W${metrics.warning ?: 0}"
+                                            "Error ${metrics.error ?: 0} · " +
+                                            "Warning ${metrics.warning ?: 0}"
 
                                         break
 
@@ -1085,24 +1122,24 @@ ${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending}
 
                                         metricsText =
                                             "${metrics.findings ?: 0} findings · " +
-                                            "H${metrics.high ?: 0} · " +
-                                            "M${metrics.medium ?: 0} · " +
-                                            "L${metrics.low ?: 0}"
+                                            "High ${metrics.high ?: 0} · " +
+                                            "Medium ${metrics.medium ?: 0} · " +
+                                            "Low ${metrics.low ?: 0}"
 
                                         break
 
                                     case 'SAST_SonarQube':
 
                                         metricsText =
-                                            "Quality Gate ${metrics.quality_gate ?: 'UNKNOWN'}"
+                                            "Quality Gate : ${metrics.quality_gate ?: 'UNKNOWN'}"
 
                                         break
 
                                     case 'SCA_Pip_Audit':
 
                                         metricsText =
-                                            "${metrics.dependencies ?: 0} deps · " +
-                                            "${metrics.vulnerable_dependencies ?: 0} vuln. · " +
+                                            "${metrics.dependencies ?: 0} dépendances · " +
+                                            "${metrics.vulnerable_dependencies ?: 0} vulnérable(s) · " +
                                             "${metrics.vulnerabilities ?: 0} CVE"
 
                                         break
@@ -1110,17 +1147,17 @@ ${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending}
                                     case 'SCA_OWASP_Dependency_Check':
 
                                         metricsText =
-                                            "${metrics.artifacts ?: 0} artifact · " +
-                                            "${metrics.vulnerabilities ?: 0} vuln. · " +
-                                            "C${metrics.critical ?: 0} · " +
-                                            "H${metrics.high ?: 0}"
+                                            "${metrics.artifacts ?: 0} artifact(s) · " +
+                                            "${metrics.vulnerabilities ?: 0} vulnérabilité(s) · " +
+                                            "Critical ${metrics.critical ?: 0} · " +
+                                            "High ${metrics.high ?: 0}"
 
                                         break
 
                                     case 'Gitleaks':
 
                                         metricsText =
-                                            "${metrics.secrets ?: 0} secret(s)"
+                                            "${metrics.secrets ?: 0} secret(s) détecté(s)"
 
                                         break
 
@@ -1133,24 +1170,24 @@ ${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending}
                                             metrics.tag ?: env.BUILD_NUMBER
 
                                         metricsText =
-                                            "${imageName}:${imageTag}"
+                                            "Image ${imageName}:${imageTag}"
 
                                         break
 
                                     case 'Trivy':
 
                                         metricsText =
-                                            "C${metrics.critical ?: 0} · " +
-                                            "H${metrics.high ?: 0} · " +
-                                            "M${metrics.medium ?: 0} · " +
-                                            "L${metrics.low ?: 0}"
+                                            "Critical ${metrics.critical ?: 0} · " +
+                                            "High ${metrics.high ?: 0} · " +
+                                            "Medium ${metrics.medium ?: 0} · " +
+                                            "Low ${metrics.low ?: 0}"
 
                                         break
 
                                     case 'Application_Start':
 
                                         metricsText =
-                                            "Health ${metrics.health_check ?: 'UNKNOWN'}"
+                                            "Health check : ${metrics.health_check ?: 'UNKNOWN'}"
 
                                         break
 
@@ -1158,43 +1195,48 @@ ${total} contrôles | 🟢 ${passed} PASS | 🔴 ${failed} FAIL | ⏳ ${pending}
 
                                         metricsText =
                                             "${metrics.alerts ?: 0} alert(s) · " +
-                                            "H${metrics.high ?: 0} · " +
-                                            "M${metrics.medium ?: 0} · " +
-                                            "L${metrics.low ?: 0}"
+                                            "High ${metrics.high ?: 0} · " +
+                                            "Medium ${metrics.medium ?: 0} · " +
+                                            "Low ${metrics.low ?: 0}"
 
                                         break
 
                                     default:
 
                                         metricsText =
-                                            'N/A'
+                                            'Métriques disponibles dans le rapport centralisé'
                                 }
 
                                 message +=
-                                    "${info.icon} *${info.label}* : " +
-                                    "${statusEmoji(status)} ${status} · ${metricsText}\n"
+                                    "${info.icon} *${info.label}* — _${info.role}_\n" +
+                                    "${statusEmoji(status)} *${statusLabel(status)}* · ${metricsText}\n"
                             }
 
                             // ====================================================
-                            // FINAL DECISION
+                            // FINAL DECISION + EVIDENCE
                             // ====================================================
                             message += """
 
-🚦 *DÉCISION*
+🚦 *DÉCISION DU PIPELINE*
 ${decisionTitle}
+${decisionMessage}
 
-🔗 ${env.BUILD_URL}
+📊 *PREUVES DE SÉCURITÉ*
+Rapports : reports/status/ | reports/raw/ | reports/security/
+Synthèse : reports/status/pipeline-summary.json
 
-🤖 *DevsecopsAI*
+🔗 *JENKINS BUILD*
+${env.BUILD_URL}
+
+🤖 Généré automatiquement par *DevsecopsAI*
 """
 
                             // ====================================================
-                            // SLACK COLOR
+                            // SLACK SEND
                             // ====================================================
                             def slackColor
 
                             switch (result) {
-
                                 case 'SUCCESS':
                                     slackColor = 'good'
                                     break
@@ -1211,9 +1253,6 @@ ${decisionTitle}
                                     slackColor = '#808080'
                             }
 
-                            // ====================================================
-                            // SEND SLACK
-                            // ====================================================
                             slackSend(
                                 channel: 'devsecops-alerts',
                                 color: slackColor,
